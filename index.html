@@ -321,34 +321,30 @@
         }
 
         function fetchMemberData(userId, displayName) {
-            console.log('获取会员数据:', userId, displayName);
-            const url = `${CONFIG.GAS_WEB_APP_URL}?method=getUserProfileWithName&userId=${encodeURIComponent(userId)}&displayName=${encodeURIComponent(displayName || '')}`;
+    console.log('获取会员数据:', userId, displayName);
+    const url = `${CONFIG.GAS_WEB_APP_URL}?method=getUserProfileWithName&userId=${encodeURIComponent(userId)}&displayName=${encodeURIComponent(displayName || '')}`;
 
-            console.log('请求 URL:', url);
-
-            fetch(url)
-                .then(response => {
-                    console.log('响应状态:', response.status);
-                    if (!response.ok) {
-                        throw new Error('网络请求失败: ' + response.status);
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    console.log('会员数据响应:', data);
-                    if (data.status === 'success') {
-                        currentUserProfile = data.profile;
-                        displayProfile(data.profile, data.isNewUser);
-                        loadUserHistory(userId);
-                    } else {
-                        throw new Error(data.message);
-                    }
-                })
-                .catch(error => {
-                    console.error('获取会员数据错误:', error);
-                    showError('获取数据失败: ' + error.message);
-                });
-        }
+    fetch(url)
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                currentUserProfile = data.profile;
+                displayProfile(data.profile, data.isNewUser);
+                loadUserHistory(userId);
+            } else {
+                // 更友好的错误提示
+                if (data.message.includes('用户不存在') || data.message.includes('会员账号')) {
+                    showError('欢迎新顾客！系统正在为您创建会员账户，请稍后刷新页面。');
+                } else {
+                    throw new Error(data.message);
+                }
+            }
+        })
+        .catch(error => {
+            console.error('获取会员数据错误:', error);
+            showError('系统暂时繁忙，请稍后重试。错误: ' + error.message);
+        });
+}
 
         function loadUserHistory(userId) {
             console.log('加载用户历史记录:', userId);
@@ -556,3 +552,4 @@
 </body>
 
 </html>
+
