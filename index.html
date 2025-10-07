@@ -213,343 +213,226 @@
     </div>
 
     <script>
-        // 配置 - 请确认这些配置正确
-        const CONFIG = {
-            GAS_WEB_APP_URL: 'https://script.google.com/macros/s/AKfycbwE9u3I4m_T3QEB6J1DUtYpzHsDdk3xkLIzBxp6i2qRRSvg33sDP6t_bSMKycIpLPU/exec', 
-            LIFF_ID: '2008235894-KBlBRgrN'
-        };
+    // 配置
+    const CONFIG = {
+        GAS_WEB_APP_URL: 'https://script.google.com/macros/s/AKfycbwE9u3I4m_T3QEB6J1DUtYpzHsDdk3xkLIzBxp6i2qRRSvg33sDP6t_bSMKycIpLPU/exec',
+        LIFF_ID: '2008235894-KBlBRgrN'
+    };
 
-        let currentUserProfile = null;
+    let currentUserProfile = null;
 
-        // 检测是否在 LINE 环境中
-        function isInLineApp() {
-            return /Line/i.test(navigator.userAgent) && typeof liff !== 'undefined';
+    // 增强的错误处理
+    function handleError(error, context) {
+        console.error(`Error in ${context}:`, error);
+        
+        let userMessage = '系统暂时繁忙，请稍后重试';
+        
+        if (error.message.includes('Failed to fetch')) {
+            userMessage = '网络连接失败，请检查网络设置';
+        } else if (error.message.includes('用户不存在')) {
+            userMessage = '自动注册失败，请联系店员手动注册';
+        } else if (error.message.includes('LIFF')) {
+            userMessage = 'LINE应用初始化失败，请尝试重新打开';
+        }
+        
+        showError(`${userMessage} (${context})`);
+    }
+
+    // LIFF初始化
+    function initializeLiff() {
+        console.log('=== LIFF 初始化开始 ===');
+        
+        if (typeof liff === 'undefined') {
+            showError('LIFF SDK 加载失败，请刷新页面重试');
+            return;
         }
 
-        // LIFF初始化
-        function initializeLiff() {
-            console.log('=== LIFF 初始化开始 ===');
-            console.log('LIFF ID:', CONFIG.LIFF_ID);
-            console.log('User Agent:', navigator.userAgent);
-            console.log('当前 URL:', window.location.href);
-            console.log('LIFF SDK 状态:', typeof liff);
+        liff.init({
+            liffId: CONFIG.LIFF_ID
+        })
+        .then(() => {
+            console.log('✅ LIFF 初始化成功');
             
-            if (!isInLineApp()) {
-                console.log('不在 LINE 环境中，显示提示');
-                showNonLineEnvironment();
-                // 显示测试区域
-                document.getElementById('testSection').style.display = 'block';
+            if (!liff.isLoggedIn()) {
+                console.log('用户未登录，执行登录');
+                liff.login();
                 return;
             }
-
-            if (typeof liff === 'undefined') {
-                console.error('LIFF SDK 未加载');
-                showError('LIFF SDK 加载失败，请稍后重试');
-                return;
-            }
-
-            liff.init({
-                liffId: CONFIG.LIFF_ID
-            })
-            .then(() => {
-                console.log('✅ LIFF 初始化成功');
-                console.log('登录状态:', liff.isLoggedIn());
-                console.log('运行环境:', liff.getOS());
-                console.log('语言:', liff.getLanguage());
-                
-                if (!liff.isLoggedIn()) {
-                    console.log('用户未登录，执行登录');
-                    liff.login();
-                } else {
-                    console.log('用户已登录，获取用户信息');
-                    loadUserProfile();
-                }
-            })
-            .catch((err) => {
-                console.error('❌ LIFF 初始化失败:', err);
-                
-                let errorMessage = 'LINE应用初始化失败: ' + err.message;
-                if (err.code === 'INVALID_LIFF_ID') {
-                    errorMessage = 'LIFF ID 配置错误: ' + CONFIG.LIFF_ID;
-                }
-                
-                showError(errorMessage);
-                // 显示测试区域
-                document.getElementById('testSection').style.display = 'block';
-            });
-        }
-
-        // 显示非 LINE 环境提示
-        function showNonLineEnvironment() {
-            document.getElementById('profileContent').innerHTML = `
-                <div class="non-line-environment">
-                    <div style="font-size: 3em; margin-bottom: 20px;">📱</div>
-                    <h2>请在 LINE 应用中打开</h2>
-                    <p>此页面只能在 LINE 应用内使用</p>
-                    <div style="margin: 20px 0; padding: 15px; background: white; border-radius: 8px;">
-                        <p><strong>使用方法:</strong></p>
-                        <ol style="text-align: left; margin: 10px 0;">
-                            <li>在 LINE 中关注店铺官方账号</li>
-                            <li>通过官方账号菜单访问</li>
-                            <li>或扫描店铺提供的二维码</li>
-                        </ol>
-                    </div>
-                    <p><small>LIFF ID: ${CONFIG.LIFF_ID}</small></p>
-                    
-                    <div class="debug-info">
-                        <strong>调试信息:</strong><br>
-                        User Agent: ${navigator.userAgent}<br>
-                        LIFF SDK: ${typeof liff}<br>
-                        当前 URL: ${window.location.href}<br>
-                        时间: ${new Date().toLocaleString()}
-                    </div>
-                </div>
-            `;
-        }
-
-        function loadUserProfile() {
-            console.log('开始获取用户信息');
+            
+            // 已登录，获取用户信息
             liff.getProfile()
                 .then(profile => {
-                    console.log('✅ 获取用户信息成功:', profile);
+                    console.log('✅ 获取用户信息成功');
                     fetchMemberData(profile.userId, profile.displayName);
                 })
                 .catch(err => {
-                    console.error('❌ 获取用户信息失败:', err);
-                    showError('获取用户信息失败: ' + err.message);
+                    handleError(err, '获取用户信息');
                 });
-        }
-
-        function fetchMemberData(userId, displayName) {
-    console.log('获取会员数据:', userId, displayName);
-    const url = `${CONFIG.GAS_WEB_APP_URL}?method=getUserProfileWithName&userId=${encodeURIComponent(userId)}&displayName=${encodeURIComponent(displayName || '')}`;
-
-    fetch(url)
-        .then(response => response.json())
-        .then(data => {
-            if (data.status === 'success') {
-                currentUserProfile = data.profile;
-                displayProfile(data.profile, data.isNewUser);
-                loadUserHistory(userId);
-            } else {
-                // 更友好的错误提示
-                if (data.message.includes('用户不存在') || data.message.includes('会员账号')) {
-                    showError('欢迎新顾客！系统正在为您创建会员账户，请稍后刷新页面。');
-                } else {
-                    throw new Error(data.message);
-                }
-            }
         })
-        .catch(error => {
-            console.error('获取会员数据错误:', error);
-            showError('系统暂时繁忙，请稍后重试。错误: ' + error.message);
+        .catch((err) => {
+            handleError(err, 'LIFF初始化');
         });
-}
+    }
 
-        function loadUserHistory(userId) {
-            console.log('加载用户历史记录:', userId);
-            const url = `${CONFIG.GAS_WEB_APP_URL}?method=getUserHistory&userId=${encodeURIComponent(userId)}&limit=20`;
-
-            fetch(url)
-                .then(response => response.json())
-                .then(data => {
-                    console.log('历史记录响应:', data);
-                    if (data.status === 'success') {
-                        displayHistory(data.history);
-                    }
-                })
-                .catch(error => {
-                    console.error('加载历史记录错误:', error);
-                });
-        }
-
-        function displayProfile(profile, isNewUser) {
-            console.log('显示用户资料:', profile);
-            let html = '';
-            
-            if (isNewUser) {
-                html = '<div class="info-section" style="background-color: #d4edda; color: #155724;">🎉 欢迎新会员！您的账户已创建。</div>';
-            }
-
-            html += `
-                <div class="points-card">
-                    <div class="points-label">当前积分</div>
-                    <div class="points-value">${profile.points}</div>
-                    <div class="points-unit">Points</div>
+    // 获取会员数据（增强版）
+    function fetchMemberData(userId, displayName) {
+        console.log('开始获取会员数据:', userId);
+        
+        // 显示加载状态
+        document.getElementById('profileContent').innerHTML = `
+            <div class="loading">
+                <div>正在为您初始化会员账户...</div>
+                <div style="font-size: 0.8em; margin-top: 10px; color: #666;">
+                    用户ID: ${userId.substring(0, 10)}...
                 </div>
+            </div>
+        `;
 
-                <div class="info-section">
-                    <div class="info-item">
-                        <span class="info-label">会员姓名</span>
-                        <span class="info-value">${escapeHtml(profile.displayName)}</span>
-                    </div>
-                    <div class="info-item">
-                        <span class="info-label">总消费额</span>
-                        <span class="info-value">￥${(profile.totalSpent || 0).toLocaleString()}</span>
-                    </div>
-                </div>
+        const url = `${CONFIG.GAS_WEB_APP_URL}?method=getUserProfileWithName&userId=${encodeURIComponent(userId)}&displayName=${encodeURIComponent(displayName || '')}`;
 
-                <div class="userid-section">
-                    <div style="font-weight: bold; color: #856404;">🔑 会员ID (请向店员出示)</div>
-                    <div class="userid-display">${escapeHtml(profile.userId)}</div>
-                    <small style="color: #856404;">店员需要扫描或输入此ID进行积分操作</small>
-                </div>
+        console.log('请求URL:', url);
 
-                <div class="tab-container">
-                    <div class="tabs">
-                        <div class="tab active" onclick="switchTab('profile')">会员信息</div>
-                        <div class="tab" onclick="switchTab('history')">消费记录</div>
-                    </div>
-                    
-                    <div id="tabProfile" class="tab-content active">
-                        <!-- 会员信息内容在上面已经显示 -->
-                    </div>
-                    
-                    <div id="tabHistory" class="tab-content">
-                        <div id="historyContent" style="min-height: 100px;">
-                            <div style="text-align: center; padding: 20px; color: #666;">
-                                加载中...
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-            
-            document.getElementById('profileContent').innerHTML = html;
-        }
+        // 添加超时处理
+        const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('请求超时')), 10000);
+        });
 
-        function displayHistory(history) {
-            console.log('显示历史记录:', history);
-            const historyContent = document.getElementById('historyContent');
-            
-            if (!historyContent) {
-                console.log('历史记录容器未找到');
-                return;
-            }
-            
-            if (!history || history.length === 0) {
-                historyContent.innerHTML = '<div style="text-align: center; padding: 20px; color: #666;">暂无消费记录</div>';
-                return;
-            }
+        const fetchPromise = fetch(url)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                return response.json();
+            });
 
-            let html = '';
-            history.forEach(record => {
-                const date = new Date(record.timestamp).toLocaleDateString('ja-JP');
-                const time = new Date(record.timestamp).toLocaleTimeString('ja-JP', { 
-                    hour: '2-digit', 
-                    minute: '2-digit' 
-                });
-                const pointsClass = record.pointsChange > 0 ? 'points-positive' : 'points-negative';
-                const pointsSign = record.pointsChange > 0 ? '+' : '';
+        Promise.race([fetchPromise, timeoutPromise])
+            .then(data => {
+                console.log('API响应:', data);
                 
-                html += `
-                    <div class="history-item">
-                        <div class="history-reason">
-                            <div>${escapeHtml(record.reason)}</div>
-                            <div class="history-date">${date} ${time}</div>
-                        </div>
-                        <div class="history-points ${pointsClass}">
-                            ${pointsSign}${record.pointsChange}
-                        </div>
+                if (data.status === 'success') {
+                    currentUserProfile = data.profile;
+                    displayProfile(data.profile, data.isNewUser);
+                    loadUserHistory(userId);
+                } else {
+                    throw new Error(data.message || '未知错误');
+                }
+            })
+            .catch(error => {
+                handleError(error, '获取会员数据');
+                
+                // 显示调试信息
+                document.getElementById('profileContent').innerHTML += `
+                    <div class="debug-info">
+                        <strong>调试信息:</strong><br>
+                        用户ID: ${userId}<br>
+                        请求URL: ${url}<br>
+                        错误: ${error.message}<br>
+                        时间: ${new Date().toLocaleString()}
                     </div>
                 `;
             });
-            
-            historyContent.innerHTML = html;
+    }
+
+    // 其他函数保持不变...
+    function loadUserHistory(userId) {
+        const url = `${CONFIG.GAS_WEB_APP_URL}?method=getUserHistory&userId=${encodeURIComponent(userId)}&limit=10`;
+        
+        fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    displayHistory(data.history);
+                }
+            })
+            .catch(error => {
+                console.error('加载历史记录失败:', error);
+            });
+    }
+
+    function displayProfile(profile, isNewUser) {
+        let html = '';
+        
+        if (isNewUser) {
+            html = '<div class="info-section" style="background-color: #d4edda; color: #155724;">🎉 欢迎新会员！您的账户已自动创建。</div>';
+        } else {
+            html = '<div class="info-section" style="background-color: #d1ecf1; color: #0c5460;">👋 欢迎回来！</div>';
         }
 
-        function switchTab(tabName) {
-            document.querySelectorAll('.tab').forEach(tab => {
-                tab.classList.remove('active');
-            });
-            document.querySelectorAll('.tab-content').forEach(content => {
-                content.classList.remove('active');
-            });
-            
-            event.target.classList.add('active');
-            document.getElementById('tab' + tabName.charAt(0).toUpperCase() + tabName.slice(1)).classList.add('active');
-        }
+        html += `
+            <div class="points-card">
+                <div class="points-label">当前积分</div>
+                <div class="points-value">${profile.points}</div>
+                <div class="points-unit">Points</div>
+            </div>
 
-        function showError(message) {
-            console.error('显示错误:', message);
-            document.getElementById('profileContent').innerHTML = `
-                <div class="error">
-                    ${escapeHtml(message)}
-                    <div style="margin-top: 15px;">
-                        <button onclick="location.reload()" style="padding: 10px 20px; background: #dc3545; color: white; border: none; border-radius: 5px; cursor: pointer;">
-                            重新加载
-                        </button>
-                    </div>
-                    <div class="debug-info">
-                        <strong>错误详情:</strong><br>
-                        时间: ${new Date().toLocaleString()}<br>
-                        URL: ${window.location.href}
+            <div class="info-section">
+                <div class="info-item">
+                    <span class="info-label">会员姓名</span>
+                    <span class="info-value">${escapeHtml(profile.displayName)}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">总消费额</span>
+                    <span class="info-value">￥${(profile.totalSpent || 0).toLocaleString()}</span>
+                </div>
+            </div>
+
+            <div class="userid-section">
+                <div style="font-weight: bold; color: #856404;">🔑 会员ID</div>
+                <div class="userid-display">${escapeHtml(profile.userId)}</div>
+                <small style="color: #856404;">请向店员出示此ID进行积分操作</small>
+            </div>
+
+            <div class="tab-container">
+                <div class="tabs">
+                    <div class="tab active" onclick="switchTab('profile')">会员信息</div>
+                    <div class="tab" onclick="switchTab('history')">消费记录</div>
+                </div>
+                
+                <div id="tabProfile" class="tab-content active"></div>
+                
+                <div id="tabHistory" class="tab-content">
+                    <div id="historyContent" style="min-height: 100px;">
+                        <div style="text-align: center; padding: 20px; color: #666;">
+                            加载中...
+                        </div>
                     </div>
                 </div>
-            `;
-        }
+            </div>
+        `;
+        
+        document.getElementById('profileContent').innerHTML = html;
+    }
 
-        // 测试功能
-        function testAPI() {
-            const testResult = document.getElementById('testResult');
-            testResult.innerHTML = '<div style="color: #667eea;">测试API连接中...</div>';
-            
-            const testUserId = 'test_user_' + Date.now();
-            const url = `${CONFIG.GAS_WEB_APP_URL}?method=getUserProfileWithName&userId=${testUserId}&displayName=测试用户`;
-            
-            fetch(url)
-                .then(response => response.json())
-                .then(data => {
-                    testResult.innerHTML = `
-                        <div style="color: #28a745;">
-                            ✅ API连接成功！<br>
-                            响应: ${JSON.stringify(data)}
-                        </div>
-                    `;
-                })
-                .catch(error => {
-                    testResult.innerHTML = `
-                        <div style="color: #dc3545;">
-                            ❌ API连接失败<br>
-                            错误: ${error.message}
-                        </div>
-                    `;
-                });
-        }
-
-        function showTestData() {
-            const testResult = document.getElementById('testResult');
-            testResult.innerHTML = `
-                <div style="text-align: left;">
-                    <strong>配置信息:</strong><br>
-                    GAS URL: ${CONFIG.GAS_WEB_APP_URL}<br>
-                    LIFF ID: ${CONFIG.LIFF_ID}<br>
-                    <br>
-                    <strong>环境信息:</strong><br>
-                    User Agent: ${navigator.userAgent}<br>
-                    当前URL: ${window.location.href}
+    function showError(message) {
+        document.getElementById('profileContent').innerHTML = `
+            <div class="error">
+                ${escapeHtml(message)}
+                <div style="margin-top: 15px;">
+                    <button onclick="location.reload()" style="padding: 10px 20px; background: #dc3545; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                        重新加载
+                    </button>
                 </div>
-            `;
-        }
+            </div>
+        `;
+    }
 
-        function escapeHtml(unsafe) {
-            if (unsafe == null) return '';
-            return unsafe.toString()
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/"/g, "&quot;")
-                .replace(/'/g, "&#039;");
-        }
+    function escapeHtml(unsafe) {
+        if (unsafe == null) return '';
+        return unsafe.toString()
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
 
-        // 页面加载完成后初始化
-        window.onload = function() {
-            console.log('=== 页面加载完成 ===');
-            console.log('开始初始化 LIFF');
-            initializeLiff();
-        };
-    </script>
+    // 页面加载
+    window.onload = function() {
+        initializeLiff();
+    };
+</script>
 </body>
 
 </html>
+
 
