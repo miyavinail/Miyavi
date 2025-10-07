@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <base target="_top">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>我的会员积分</title>
     <script src="https://static.line-scdn.net/liff/edge/versions/2.22.3/sdk.js"></script>
@@ -174,6 +173,22 @@
             font-size: 12px;
             text-align: left;
         }
+        .test-section {
+            background: #e7f3ff;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        .test-button {
+            padding: 10px 20px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
     </style>
 </head>
 <body>
@@ -186,10 +201,19 @@
         <div id="profileContent">
             <div class="loading">初始化中...</div>
         </div>
+
+        <!-- 测试区域（仅在非LINE环境显示） -->
+        <div id="testSection" class="test-section" style="display: none;">
+            <h3>🔧 测试功能</h3>
+            <p>在非LINE环境中测试API连接</p>
+            <button class="test-button" onclick="testAPI()">测试API连接</button>
+            <button class="test-button" onclick="showTestData()">显示测试数据</button>
+            <div id="testResult" style="margin-top: 15px; text-align: left;"></div>
+        </div>
     </div>
 
     <script>
-        // 配置
+        // 配置 - 请确认这些配置正确
         const CONFIG = {
             GAS_WEB_APP_URL: 'https://script.google.com/macros/s/AKfycbwE9u3I4m_T3QEB6J1DUtYpzHsDdk3xkLIzBxp6i2qRRSvg33sDP6t_bSMKycIpLPU/exec', 
             LIFF_ID: '2008235894'
@@ -213,6 +237,8 @@
             if (!isInLineApp()) {
                 console.log('不在 LINE 环境中，显示提示');
                 showNonLineEnvironment();
+                // 显示测试区域
+                document.getElementById('testSection').style.display = 'block';
                 return;
             }
 
@@ -248,6 +274,8 @@
                 }
                 
                 showError(errorMessage);
+                // 显示测试区域
+                document.getElementById('testSection').style.display = 'block';
             });
         }
 
@@ -259,11 +287,11 @@
                     <h2>请在 LINE 应用中打开</h2>
                     <p>此页面只能在 LINE 应用内使用</p>
                     <div style="margin: 20px 0; padding: 15px; background: white; border-radius: 8px;">
-                        <p><strong>测试方法:</strong></p>
+                        <p><strong>使用方法:</strong></p>
                         <ol style="text-align: left; margin: 10px 0;">
-                            <li>在 LINE 聊天中发送链接</li>
+                            <li>在 LINE 中关注店铺官方账号</li>
                             <li>通过官方账号菜单访问</li>
-                            <li>扫描 LIFF 二维码</li>
+                            <li>或扫描店铺提供的二维码</li>
                         </ol>
                     </div>
                     <p><small>LIFF ID: ${CONFIG.LIFF_ID}</small></p>
@@ -461,6 +489,49 @@
                         时间: ${new Date().toLocaleString()}<br>
                         URL: ${window.location.href}
                     </div>
+                </div>
+            `;
+        }
+
+        // 测试功能
+        function testAPI() {
+            const testResult = document.getElementById('testResult');
+            testResult.innerHTML = '<div style="color: #667eea;">测试API连接中...</div>';
+            
+            const testUserId = 'test_user_' + Date.now();
+            const url = `${CONFIG.GAS_WEB_APP_URL}?method=getUserProfileWithName&userId=${testUserId}&displayName=测试用户`;
+            
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    testResult.innerHTML = `
+                        <div style="color: #28a745;">
+                            ✅ API连接成功！<br>
+                            响应: ${JSON.stringify(data)}
+                        </div>
+                    `;
+                })
+                .catch(error => {
+                    testResult.innerHTML = `
+                        <div style="color: #dc3545;">
+                            ❌ API连接失败<br>
+                            错误: ${error.message}
+                        </div>
+                    `;
+                });
+        }
+
+        function showTestData() {
+            const testResult = document.getElementById('testResult');
+            testResult.innerHTML = `
+                <div style="text-align: left;">
+                    <strong>配置信息:</strong><br>
+                    GAS URL: ${CONFIG.GAS_WEB_APP_URL}<br>
+                    LIFF ID: ${CONFIG.LIFF_ID}<br>
+                    <br>
+                    <strong>环境信息:</strong><br>
+                    User Agent: ${navigator.userAgent}<br>
+                    当前URL: ${window.location.href}
                 </div>
             `;
         }
