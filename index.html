@@ -2,9 +2,10 @@
 <html>
 <head>
     <base target="_top">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>我的会员积分</title>
-    <script src="https://static.line-scdn.net/liff/edge/versions/2.22.3/sdk.js"></script>
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     <style>
         body { 
             font-family: 'Helvetica Neue', Arial, sans-serif; 
@@ -32,10 +33,6 @@
             font-weight: bold;
             margin-bottom: 5px;
         }
-        .welcome-text {
-            color: #666;
-            font-size: 0.9em;
-        }
         .points-card {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
@@ -55,10 +52,6 @@
             font-weight: bold;
             margin: 10px 0;
         }
-        .points-unit {
-            font-size: 1em;
-            opacity: 0.8;
-        }
         .info-section {
             background: #f8f9fa;
             padding: 20px;
@@ -71,14 +64,6 @@
             margin: 12px 0;
             padding: 8px 0;
             border-bottom: 1px solid #eee;
-        }
-        .info-label {
-            color: #666;
-            font-weight: 500;
-        }
-        .info-value {
-            color: #333;
-            font-weight: bold;
         }
         .userid-section {
             background: #fff3cd;
@@ -96,56 +81,6 @@
             word-break: break-all;
             margin: 10px 0;
         }
-        .tab-container {
-            margin: 20px 0;
-        }
-        .tabs {
-            display: flex;
-            border-bottom: 2px solid #eee;
-            margin-bottom: 15px;
-        }
-        .tab {
-            padding: 10px 20px;
-            cursor: pointer;
-            border-bottom: 3px solid transparent;
-            font-weight: 500;
-        }
-        .tab.active {
-            border-bottom-color: #667eea;
-            color: #667eea;
-        }
-        .tab-content {
-            display: none;
-        }
-        .tab-content.active {
-            display: block;
-        }
-        .history-item {
-            display: flex;
-            justify-content: space-between;
-            padding: 12px 0;
-            border-bottom: 1px solid #f0f0f0;
-        }
-        .history-reason {
-            flex-grow: 1;
-            margin-right: 15px;
-        }
-        .history-points {
-            font-weight: bold;
-            min-width: 60px;
-            text-align: right;
-        }
-        .points-positive {
-            color: #28a745;
-        }
-        .points-negative {
-            color: #dc3545;
-        }
-        .history-date {
-            color: #666;
-            font-size: 0.8em;
-            margin-top: 2px;
-        }
         .loading, .error {
             text-align: center;
             padding: 40px 20px;
@@ -159,21 +94,6 @@
             border-radius: 10px;
             margin: 20px 0;
         }
-        .non-line-environment {
-            text-align: center;
-            padding: 40px 20px;
-            background: #e7f3ff;
-            border-radius: 10px;
-            margin: 20px 0;
-        }
-        .debug-info {
-            margin-top: 20px;
-            padding: 15px;
-            background: #f5f5f5;
-            border-radius: 8px;
-            font-size: 12px;
-            text-align: left;
-        }
     </style>
 </head>
 <body>
@@ -184,41 +104,27 @@
         </div>
         
         <div id="profileContent">
-            <div class="loading">初始化中...</div>
+            <div class="loading">
+                <div>初始化中...</div>
+                <div style="margin-top: 10px; font-size: 0.8em; color: #666;">正在连接LINE服务</div>
+            </div>
         </div>
     </div>
 
     <script>
-        // 配置
+        // 配置 - 请替换为您的LIFF ID
         const CONFIG = {
-            GAS_WEB_APP_URL: 'https://script.google.com/macros/s/AKfycbyLqyG_rGRbR7Zb5ctOmG3aftfT9h2zEeUti8vNJMXOFYnnNxJx0mLBvxH1ZXWwbKw/exec', 
-            LIFF_ID: '2008235894-KBlBRgrN'
+            LIFF_ID: '2008235894-KBlBRgrN' // 请替换为您的实际LIFF ID
         };
 
-        let currentUserProfile = null;
+        let liffInitialized = false;
 
-        // 检测是否在 LINE 环境中
-        function isInLineApp() {
-            return /Line/i.test(navigator.userAgent) && typeof liff !== 'undefined';
-        }
-
-        // LIFF初始化
+        // 初始化LIFF
         function initializeLiff() {
-            console.log('=== LIFF 初始化开始 ===');
-            console.log('LIFF ID:', CONFIG.LIFF_ID);
-            console.log('User Agent:', navigator.userAgent);
-            console.log('当前 URL:', window.location.href);
-            console.log('LIFF SDK 状态:', typeof liff);
+            console.log('开始初始化LIFF...');
             
-            if (!isInLineApp()) {
-                console.log('不在 LINE 环境中，显示提示');
-                showNonLineEnvironment();
-                return;
-            }
-
             if (typeof liff === 'undefined') {
-                console.error('LIFF SDK 未加载');
-                showError('LIFF SDK 加载失败，请稍后重试');
+                showError('LINE服务加载失败，请稍后重试');
                 return;
             }
 
@@ -226,10 +132,8 @@
                 liffId: CONFIG.LIFF_ID
             })
             .then(() => {
-                console.log('✅ LIFF 初始化成功');
-                console.log('登录状态:', liff.isLoggedIn());
-                console.log('运行环境:', liff.getOS());
-                console.log('语言:', liff.getLanguage());
+                console.log('LIFF初始化成功');
+                liffInitialized = true;
                 
                 if (!liff.isLoggedIn()) {
                     console.log('用户未登录，执行登录');
@@ -239,129 +143,74 @@
                     loadUserProfile();
                 }
             })
-            .catch((err) => {
-                console.error('❌ LIFF 初始化失败:', err);
-                
-                let errorMessage = 'LINE应用初始化失败: ' + err.message;
-                if (err.code === 'INVALID_LIFF_ID') {
-                    errorMessage = 'LIFF ID 配置错误: ' + CONFIG.LIFF_ID;
-                }
-                
-                showError(errorMessage);
+            .catch((error) => {
+                console.error('LIFF初始化失败:', error);
+                showError('应用初始化失败: ' + error.message);
             });
         }
 
-        // 显示非 LINE 环境提示
-        function showNonLineEnvironment() {
-            document.getElementById('profileContent').innerHTML = `
-                <div class="non-line-environment">
-                    <div style="font-size: 3em; margin-bottom: 20px;">📱</div>
-                    <h2>请在 LINE 应用中打开</h2>
-                    <p>此页面只能在 LINE 应用内使用</p>
-                    <div style="margin: 20px 0; padding: 15px; background: white; border-radius: 8px;">
-                        <p><strong>测试方法:</strong></p>
-                        <ol style="text-align: left; margin: 10px 0;">
-                            <li>在 LINE 聊天中发送链接</li>
-                            <li>通过官方账号菜单访问</li>
-                            <li>扫描 LIFF 二维码</li>
-                        </ol>
-                    </div>
-                    <p><small>LIFF ID: ${CONFIG.LIFF_ID}</small></p>
-                    
-                    <div class="debug-info">
-                        <strong>调试信息:</strong><br>
-                        User Agent: ${navigator.userAgent}<br>
-                        LIFF SDK: ${typeof liff}<br>
-                        当前 URL: ${window.location.href}<br>
-                        时间: ${new Date().toLocaleString()}
-                    </div>
-                </div>
-            `;
-        }
-
+        // 加载用户资料
         function loadUserProfile() {
-            console.log('开始获取用户信息');
+            console.log('开始获取LINE用户信息...');
+            
             liff.getProfile()
                 .then(profile => {
-                    console.log('✅ 获取用户信息成功:', profile);
+                    console.log('获取LINE用户信息成功:', profile);
                     fetchMemberData(profile.userId, profile.displayName);
                 })
-                .catch(err => {
-                    console.error('❌ 获取用户信息失败:', err);
-                    showError('获取用户信息失败: ' + err.message);
+                .catch(error => {
+                    console.error('获取LINE用户信息失败:', error);
+                    showError('获取用户信息失败: ' + error.message);
                 });
         }
 
+        // 从GAS后端获取会员数据
         function fetchMemberData(userId, displayName) {
             console.log('获取会员数据:', userId, displayName);
-            const url = `${CONFIG.GAS_WEB_APP_URL}?method=getUserProfileWithName&userId=${encodeURIComponent(userId)}&displayName=${encodeURIComponent(displayName || '')}`;
+            
+            document.getElementById('profileContent').innerHTML = '<div class="loading">加载会员信息中...</div>';
 
-            console.log('请求 URL:', url);
-
-            fetch(url)
-                .then(response => {
-                    console.log('响应状态:', response.status);
-                    if (!response.ok) {
-                        throw new Error('网络请求失败: ' + response.status);
-                    }
-                    return response.json();
-                })
-                .then(data => {
+            google.script.run
+                .withSuccessHandler(function(data) {
                     console.log('会员数据响应:', data);
                     if (data.status === 'success') {
-                        currentUserProfile = data.profile;
                         displayProfile(data.profile, data.isNewUser);
-                        loadUserHistory(userId);
                     } else {
-                        throw new Error(data.message);
+                        throw new Error(data.message || '获取会员数据失败');
                     }
                 })
-                .catch(error => {
+                .withFailureHandler(function(error) {
                     console.error('获取会员数据错误:', error);
-                    showError('获取数据失败: ' + error.message);
-                });
-        }
-
-        function loadUserHistory(userId) {
-            console.log('加载用户历史记录:', userId);
-            const url = `${CONFIG.GAS_WEB_APP_URL}?method=getUserHistory&userId=${encodeURIComponent(userId)}&limit=20`;
-
-            fetch(url)
-                .then(response => response.json())
-                .then(data => {
-                    console.log('历史记录响应:', data);
-                    if (data.status === 'success') {
-                        displayHistory(data.history);
-                    }
+                    showError('获取会员数据失败: ' + error.message);
                 })
-                .catch(error => {
-                    console.error('加载历史记录错误:', error);
-                });
+                .getUserProfile(userId, displayName);
         }
 
+        // 显示用户资料
         function displayProfile(profile, isNewUser) {
             console.log('显示用户资料:', profile);
+            
             let html = '';
             
             if (isNewUser) {
-                html = '<div class="info-section" style="background-color: #d4edda; color: #155724;">🎉 欢迎新会员！您的账户已创建。</div>';
+                html = '<div style="background: #d4edda; color: #155724; padding: 15px; border-radius: 8px; margin-bottom: 15px; text-align: center;">🎉 欢迎新会员！</div>';
             }
 
             html += `
                 <div class="points-card">
                     <div class="points-label">当前积分</div>
                     <div class="points-value">${profile.points}</div>
-                    <div class="points-unit">Points</div>
+                    <div>Points</div>
                 </div>
 
                 <div class="info-section">
                     <div class="info-item">
-                        <span class="info-label">会员姓名</span>
-                        <span class="info-value">${escapeHtml(profile.displayName)}</span>
+                        <span>会员姓名</span>
+                        <span style="font-weight: bold;">${escapeHtml(profile.displayName)}</span>
                     </div>
                     <div class="info-item">
-                        <span class="info-label">总消费额</span>
-                        <span class="info-value">￥${(profile.totalSpent || 0).toLocaleString()}</span>
+                        <span>总消费额</span>
+                        <span style="font-weight: bold;">￥${(profile.totalSpent || 0).toLocaleString()}</span>
                     </div>
                 </div>
 
@@ -370,80 +219,9 @@
                     <div class="userid-display">${escapeHtml(profile.userId)}</div>
                     <small style="color: #856404;">店员需要扫描或输入此ID进行积分操作</small>
                 </div>
-
-                <div class="tab-container">
-                    <div class="tabs">
-                        <div class="tab active" onclick="switchTab('profile')">会员信息</div>
-                        <div class="tab" onclick="switchTab('history')">消费记录</div>
-                    </div>
-                    
-                    <div id="tabProfile" class="tab-content active">
-                        <!-- 会员信息内容在上面已经显示 -->
-                    </div>
-                    
-                    <div id="tabHistory" class="tab-content">
-                        <div id="historyContent" style="min-height: 100px;">
-                            <div style="text-align: center; padding: 20px; color: #666;">
-                                加载中...
-                            </div>
-                        </div>
-                    </div>
-                </div>
             `;
             
             document.getElementById('profileContent').innerHTML = html;
-        }
-
-        function displayHistory(history) {
-            console.log('显示历史记录:', history);
-            const historyContent = document.getElementById('historyContent');
-            
-            if (!historyContent) {
-                console.log('历史记录容器未找到');
-                return;
-            }
-            
-            if (!history || history.length === 0) {
-                historyContent.innerHTML = '<div style="text-align: center; padding: 20px; color: #666;">暂无消费记录</div>';
-                return;
-            }
-
-            let html = '';
-            history.forEach(record => {
-                const date = new Date(record.timestamp).toLocaleDateString('ja-JP');
-                const time = new Date(record.timestamp).toLocaleTimeString('ja-JP', { 
-                    hour: '2-digit', 
-                    minute: '2-digit' 
-                });
-                const pointsClass = record.pointsChange > 0 ? 'points-positive' : 'points-negative';
-                const pointsSign = record.pointsChange > 0 ? '+' : '';
-                
-                html += `
-                    <div class="history-item">
-                        <div class="history-reason">
-                            <div>${escapeHtml(record.reason)}</div>
-                            <div class="history-date">${date} ${time}</div>
-                        </div>
-                        <div class="history-points ${pointsClass}">
-                            ${pointsSign}${record.pointsChange}
-                        </div>
-                    </div>
-                `;
-            });
-            
-            historyContent.innerHTML = html;
-        }
-
-        function switchTab(tabName) {
-            document.querySelectorAll('.tab').forEach(tab => {
-                tab.classList.remove('active');
-            });
-            document.querySelectorAll('.tab-content').forEach(content => {
-                content.classList.remove('active');
-            });
-            
-            event.target.classList.add('active');
-            document.getElementById('tab' + tabName.charAt(0).toUpperCase() + tabName.slice(1)).classList.add('active');
         }
 
         function showError(message) {
@@ -455,11 +233,6 @@
                         <button onclick="location.reload()" style="padding: 10px 20px; background: #dc3545; color: white; border: none; border-radius: 5px; cursor: pointer;">
                             重新加载
                         </button>
-                    </div>
-                    <div class="debug-info">
-                        <strong>错误详情:</strong><br>
-                        时间: ${new Date().toLocaleString()}<br>
-                        URL: ${window.location.href}
                     </div>
                 </div>
             `;
@@ -475,10 +248,9 @@
                 .replace(/'/g, "&#039;");
         }
 
-        // 页面加载完成后初始化
+        // 页面加载后初始化
         window.onload = function() {
-            console.log('=== 页面加载完成 ===');
-            console.log('开始初始化 LIFF');
+            console.log('页面加载完成，开始初始化LIFF');
             initializeLiff();
         };
     </script>
