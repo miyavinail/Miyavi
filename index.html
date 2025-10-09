@@ -111,148 +111,98 @@
         </div>
     </div>
 
-    <script>
-        // 配置 - 请替换为您的LIFF ID
-        const CONFIG = {
-            LIFF_ID: '2008235894-KBlBRgrN' // 请替换为您的实际LIFF ID
-        };
+   <script>
+    // 配置 - 请替换为您的实际信息
+    const CONFIG = {
+        LIFF_ID: '2008235894-KBlBRgrN', // 您的LIFF ID
+        GAS_WEB_APP_URL: 'https://script.google.com/macros/s/AKfycbxA7hgTlVWJR-QNTbpp2twNeLvtMKXzhKMDE-Q50yiKzQ5rdJ0BAAYJl1Pd2IbhTBkR/exec'
+    };
 
-        let liffInitialized = false;
+    // 初始化LIFF
+    function initializeLiff() {
+        console.log('开始初始化LIFF...');
+        console.log('GAS URL:', CONFIG.GAS_WEB_APP_URL);
+        
+        if (typeof liff === 'undefined') {
+            showError('LINE服务加载失败，请稍后重试');
+            return;
+        }
 
-        // 初始化LIFF
-        function initializeLiff() {
-            console.log('开始初始化LIFF...');
+        liff.init({
+            liffId: CONFIG.LIFF_ID
+        })
+        .then(() => {
+            console.log('LIFF初始化成功');
             
-            if (typeof liff === 'undefined') {
-                showError('LINE服务加载失败，请稍后重试');
-                return;
+            if (!liff.isLoggedIn()) {
+                console.log('用户未登录，执行登录');
+                liff.login();
+            } else {
+                console.log('用户已登录，获取用户信息');
+                loadUserProfile();
             }
+        })
+        .catch((error) => {
+            console.error('LIFF初始化失败:', error);
+            showError('应用初始化失败: ' + error.message);
+        });
+    }
 
-            liff.init({
-                liffId: CONFIG.LIFF_ID
-            })
-            .then(() => {
-                console.log('LIFF初始化成功');
-                liffInitialized = true;
+    // 加载用户资料 - 使用google.script.run（推荐，无CORS问题）
+    function loadUserProfile() {
+        console.log('开始获取LINE用户信息...');
+        
+        liff.getProfile()
+            .then(profile => {
+                console.log('获取LINE用户信息成功:', profile);
                 
-                if (!liff.isLoggedIn()) {
-                    console.log('用户未登录，执行登录');
-                    liff.login();
+                // 方法1: 使用google.script.run（推荐）
+                document.getElementById('profileContent').innerHTML = '<div class="loading">加载会员信息中...</div>';
+                
+                google.script.run
+                    .withSuccessHandler(function(data) {
+                        console.log('会员数据响应:', data);
+                        if (data.status === 'success') {
+                            displayProfile(data.profile, data.isNewUser);
+                        } else {
+                            throw new Error(data.message || '获取会员数据失败');
+                        }
+                    })
+                    .withFailureHandler(function(error) {
+                        console.error('获取会员数据错误:', error);
+                        // 如果google.script.run失败，尝试使用fetch
+                        fetchMemberData(profile.userId, profile.displayName);
+                    })
+                    .getUserProfile(profile.userId, profile.displayName);
+            })
+            .catch(error => {
+                console.error('获取LINE用户信息失败:', error);
+                showError('获取用户信息失败: ' + error.message);
+            });
+    }
+
+    // 备用方法：使用fetch（如果google.script.run失败）
+    function fetchMemberData(userId, displayName) {
+        console.log('使用fetch获取会员数据');
+        
+        const url = CONFIG.GAS_WEB_APP_URL + '?method=getUserProfile&userId=' + encodeURIComponent(userId) + '&displayName=' + encodeURIComponent(displayName);
+        
+        fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    displayProfile(data.profile, data.isNewUser);
                 } else {
-                    console.log('用户已登录，获取用户信息');
-                    loadUserProfile();
+                    throw new Error(data.message);
                 }
             })
-            .catch((error) => {
-                console.error('LIFF初始化失败:', error);
-                showError('应用初始化失败: ' + error.message);
+            .catch(error => {
+                console.error('Fetch获取会员数据错误:', error);
+                showError('获取会员数据失败: ' + error.message);
             });
-        }
+    }
 
-        // 加载用户资料
-        function loadUserProfile() {
-            console.log('开始获取LINE用户信息...');
-            
-            liff.getProfile()
-                .then(profile => {
-                    console.log('获取LINE用户信息成功:', profile);
-                    fetchMemberData(profile.userId, profile.displayName);
-                })
-                .catch(error => {
-                    console.error('获取LINE用户信息失败:', error);
-                    showError('获取用户信息失败: ' + error.message);
-                });
-        }
-
-        // 从GAS后端获取会员数据
-        function fetchMemberData(userId, displayName) {
-            console.log('获取会员数据:', userId, displayName);
-            
-            document.getElementById('profileContent').innerHTML = '<div class="loading">加载会员信息中...</div>';
-
-            google.script.run
-                .withSuccessHandler(function(data) {
-                    console.log('会员数据响应:', data);
-                    if (data.status === 'success') {
-                        displayProfile(data.profile, data.isNewUser);
-                    } else {
-                        throw new Error(data.message || '获取会员数据失败');
-                    }
-                })
-                .withFailureHandler(function(error) {
-                    console.error('获取会员数据错误:', error);
-                    showError('获取会员数据失败: ' + error.message);
-                })
-                .getUserProfile(userId, displayName);
-        }
-
-        // 显示用户资料
-        function displayProfile(profile, isNewUser) {
-            console.log('显示用户资料:', profile);
-            
-            let html = '';
-            
-            if (isNewUser) {
-                html = '<div style="background: #d4edda; color: #155724; padding: 15px; border-radius: 8px; margin-bottom: 15px; text-align: center;">🎉 欢迎新会员！</div>';
-            }
-
-            html += `
-                <div class="points-card">
-                    <div class="points-label">当前积分</div>
-                    <div class="points-value">${profile.points}</div>
-                    <div>Points</div>
-                </div>
-
-                <div class="info-section">
-                    <div class="info-item">
-                        <span>会员姓名</span>
-                        <span style="font-weight: bold;">${escapeHtml(profile.displayName)}</span>
-                    </div>
-                    <div class="info-item">
-                        <span>总消费额</span>
-                        <span style="font-weight: bold;">￥${(profile.totalSpent || 0).toLocaleString()}</span>
-                    </div>
-                </div>
-
-                <div class="userid-section">
-                    <div style="font-weight: bold; color: #856404;">🔑 会员ID (请向店员出示)</div>
-                    <div class="userid-display">${escapeHtml(profile.userId)}</div>
-                    <small style="color: #856404;">店员需要扫描或输入此ID进行积分操作</small>
-                </div>
-            `;
-            
-            document.getElementById('profileContent').innerHTML = html;
-        }
-
-        function showError(message) {
-            console.error('显示错误:', message);
-            document.getElementById('profileContent').innerHTML = `
-                <div class="error">
-                    ${escapeHtml(message)}
-                    <div style="margin-top: 15px;">
-                        <button onclick="location.reload()" style="padding: 10px 20px; background: #dc3545; color: white; border: none; border-radius: 5px; cursor: pointer;">
-                            重新加载
-                        </button>
-                    </div>
-                </div>
-            `;
-        }
-
-        function escapeHtml(unsafe) {
-            if (unsafe == null) return '';
-            return unsafe.toString()
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/"/g, "&quot;")
-                .replace(/'/g, "&#039;");
-        }
-
-        // 页面加载后初始化
-        window.onload = function() {
-            console.log('页面加载完成，开始初始化LIFF');
-            initializeLiff();
-        };
-    </script>
+    // ... 其余代码保持不变 ...
+</script>
 </body>
 </html>
