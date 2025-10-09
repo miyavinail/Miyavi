@@ -8,7 +8,7 @@
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     <style>
         body { 
-            font-family: 'Helvetica Neue', Arial, sans-serif; 
+            font-family: Arial, sans-serif; 
             margin: 0; 
             padding: 20px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -23,16 +23,6 @@
             border-radius: 20px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.2);
         }
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        .shop-name {
-            font-size: 1.4em;
-            color: #667eea;
-            font-weight: bold;
-            margin-bottom: 5px;
-        }
         .points-card {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
@@ -40,169 +30,242 @@
             border-radius: 15px;
             text-align: center;
             margin: 20px 0;
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
-        }
-        .points-label {
-            font-size: 0.9em;
-            opacity: 0.9;
-            margin-bottom: 5px;
-        }
-        .points-value {
-            font-size: 3em;
-            font-weight: bold;
-            margin: 10px 0;
-        }
-        .info-section {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 12px;
-            margin: 20px 0;
-        }
-        .info-item {
-            display: flex;
-            justify-content: space-between;
-            margin: 12px 0;
-            padding: 8px 0;
-            border-bottom: 1px solid #eee;
-        }
-        .userid-section {
-            background: #fff3cd;
-            border: 2px solid #ffc107;
-            border-radius: 10px;
-            padding: 15px;
-            margin: 20px 0;
-        }
-        .userid-display {
-            background: white;
-            padding: 10px;
-            border-radius: 6px;
-            font-family: 'Courier New', monospace;
-            font-size: 0.8em;
-            word-break: break-all;
-            margin: 10px 0;
         }
         .loading, .error {
             text-align: center;
             padding: 40px 20px;
         }
-        .loading {
-            color: #667eea;
-        }
         .error {
-            color: #dc3545;
             background: #f8d7da;
+            color: #721c24;
             border-radius: 10px;
-            margin: 20px 0;
+        }
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 2s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="header">
-            <div class="shop-name">我的店铺</div>
-            <div class="welcome-text">会员中心</div>
+        <div style="text-align: center; margin-bottom: 20px;">
+            <div style="font-size: 1.4em; color: #667eea; font-weight: bold;">我的店铺</div>
+            <div style="color: #666;">会员中心</div>
         </div>
         
         <div id="profileContent">
             <div class="loading">
-                <div>初始化中...</div>
-                <div style="margin-top: 10px; font-size: 0.8em; color: #666;">正在连接LINE服务</div>
+                <div>正在加载您的会员信息...</div>
+                <div class="loading-spinner"></div>
             </div>
         </div>
     </div>
 
-   <script>
-    // 配置 - 请替换为您的实际信息
-    const CONFIG = {
-        LIFF_ID: '2008235894-KBlBRgrN', // 您的LIFF ID
-        GAS_WEB_APP_URL: 'https://script.google.com/macros/s/AKfycbxA7hgTlVWJR-QNTbpp2twNeLvtMKXzhKMDE-Q50yiKzQ5rdJ0BAAYJl1Pd2IbhTBkR/exec'
-    };
+    <script>
+        const CONFIG = {
+            LIFF_ID: '2008235894-KBlBRgrN'
+        };
 
-    // 初始化LIFF
-    function initializeLiff() {
-        console.log('开始初始化LIFF...');
-        console.log('GAS URL:', CONFIG.GAS_WEB_APP_URL);
-        
-        if (typeof liff === 'undefined') {
-            showError('LINE服务加载失败，请稍后重试');
-            return;
+        // 初始化LIFF并自动查询
+        async function initializeLiffAndQuery() {
+            console.log('=== 开始自动查询流程 ===');
+            
+            try {
+                // 检查是否在LINE环境中
+                if (!/Line/i.test(navigator.userAgent)) {
+                    console.log('不在LINE环境中，显示提示信息');
+                    showNonLINEInfo();
+                    return;
+                }
+
+                // 初始化LIFF
+                await liff.init({ liffId: CONFIG.LIFF_ID });
+                console.log('✅ LIFF初始化成功');
+                
+                if (!liff.isLoggedIn()) {
+                    console.log('用户未登录，执行登录');
+                    liff.login();
+                    return;
+                }
+
+                // 获取LINE用户信息
+                const profile = await liff.getProfile();
+                console.log('✅ 获取LINE用户信息成功:', profile);
+                
+                // 自动查询会员数据
+                await autoQueryMemberData(profile.userId, profile.displayName);
+                
+            } catch (error) {
+                console.error('❌ 自动查询失败:', error);
+                showError('系统错误: ' + error.message);
+            }
         }
 
-        liff.init({
-            liffId: CONFIG.LIFF_ID
-        })
-        .then(() => {
-            console.log('LIFF初始化成功');
+        // 自动查询会员数据
+        async function autoQueryMemberData(userId, displayName) {
+            console.log('开始自动查询会员数据:', userId, displayName);
             
-            if (!liff.isLoggedIn()) {
-                console.log('用户未登录，执行登录');
-                liff.login();
-            } else {
-                console.log('用户已登录，获取用户信息');
-                loadUserProfile();
-            }
-        })
-        .catch((error) => {
-            console.error('LIFF初始化失败:', error);
-            showError('应用初始化失败: ' + error.message);
-        });
-    }
-
-    // 加载用户资料 - 使用google.script.run（推荐，无CORS问题）
-    function loadUserProfile() {
-        console.log('开始获取LINE用户信息...');
-        
-        liff.getProfile()
-            .then(profile => {
-                console.log('获取LINE用户信息成功:', profile);
-                
-                // 方法1: 使用google.script.run（推荐）
-                document.getElementById('profileContent').innerHTML = '<div class="loading">加载会员信息中...</div>';
-                
+            showMessage('正在加载您的会员信息...');
+            
+            try {
+                // 使用google.script.run获取会员数据
                 google.script.run
                     .withSuccessHandler(function(data) {
-                        console.log('会员数据响应:', data);
-                        if (data.status === 'success') {
-                            displayProfile(data.profile, data.isNewUser);
-                        } else {
-                            throw new Error(data.message || '获取会员数据失败');
-                        }
+                        console.log('✅ 收到会员数据:', data);
+                        handleMemberDataResponse(data, userId, displayName);
                     })
                     .withFailureHandler(function(error) {
-                        console.error('获取会员数据错误:', error);
-                        // 如果google.script.run失败，尝试使用fetch
-                        fetchMemberData(profile.userId, profile.displayName);
+                        console.error('❌ 获取会员数据失败:', error);
+                        showError('查询失败: ' + error.message, userId);
                     })
-                    .getUserProfile(profile.userId, profile.displayName);
-            })
-            .catch(error => {
-                console.error('获取LINE用户信息失败:', error);
-                showError('获取用户信息失败: ' + error.message);
-            });
-    }
+                    .getUserProfile(userId, displayName);
+            } catch (error) {
+                console.error('查询异常:', error);
+                showError('系统异常: ' + error.message, userId);
+            }
+        }
 
-    // 备用方法：使用fetch（如果google.script.run失败）
-    function fetchMemberData(userId, displayName) {
-        console.log('使用fetch获取会员数据');
-        
-        const url = CONFIG.GAS_WEB_APP_URL + '?method=getUserProfile&userId=' + encodeURIComponent(userId) + '&displayName=' + encodeURIComponent(displayName);
-        
-        fetch(url)
-            .then(response => response.json())
-            .then(data => {
-                if (data.status === 'success') {
-                    displayProfile(data.profile, data.isNewUser);
-                } else {
-                    throw new Error(data.message);
-                }
-            })
-            .catch(error => {
-                console.error('Fetch获取会员数据错误:', error);
-                showError('获取会员数据失败: ' + error.message);
-            });
-    }
+        // 处理会员数据响应
+        function handleMemberDataResponse(data, userId, displayName) {
+            if (!data) {
+                console.error('收到空数据');
+                showError('服务器返回空数据，请稍后重试', userId);
+                return;
+            }
+            
+            if (data.status === 'success') {
+                // 成功获取数据，显示用户资料
+                displayProfile(data.profile, data.isNewUser);
+            } else {
+                // 如果获取失败，显示错误信息
+                showError('查询失败: ' + (data.message || '未知错误'), userId);
+            }
+        }
 
-    // ... 其余代码保持不变 ...
-</script>
+        // 显示非LINE环境提示
+        function showNonLINEInfo() {
+            document.getElementById('profileContent').innerHTML = `
+                <div style="text-align: center; padding: 40px 20px;">
+                    <h3>请在LINE中打开</h3>
+                    <p style="color: #666; margin: 20px 0;">
+                        此页面需要在LINE应用中打开才能自动显示您的会员信息。
+                    </p>
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                        <p><strong>如需查询积分，请联系店员</strong></p>
+                    </div>
+                </div>
+            `;
+        }
+
+        // 显示消息
+        function showMessage(message) {
+            document.getElementById('profileContent').innerHTML = `
+                <div style="text-align: center; padding: 40px 20px; color: #667eea;">
+                    <div style="font-size: 1.2em; margin-bottom: 20px;">${message}</div>
+                    <div class="loading-spinner"></div>
+                </div>
+            `;
+        }
+
+        // 显示错误
+        function showError(message, userId = '') {
+            let html = `
+                <div class="error">
+                    <h3>❌ 加载失败</h3>
+                    <p>${message}</p>
+                    <button onclick="location.reload()" 
+                            style="padding: 10px 20px; background: #dc3545; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 10px;">
+                        重新加载
+                    </button>
+            `;
+            
+            if (userId) {
+                html += `
+                    <div style="margin-top: 15px; padding: 10px; background: white; border-radius: 5px;">
+                        <strong>您的用户ID:</strong><br>
+                        <div style="font-family: monospace; font-size: 0.8em; word-break: break-all; margin: 5px 0;">
+                            ${userId}
+                        </div>
+                        <small>请向店员提供此ID进行积分操作</small>
+                    </div>
+                `;
+            }
+            
+            html += `</div>`;
+            document.getElementById('profileContent').innerHTML = html;
+        }
+
+        // 显示用户资料
+        function displayProfile(profile, isNewUser) {
+            console.log('显示用户资料:', profile);
+            
+            let html = '';
+            
+            if (isNewUser) {
+                html = `
+                    <div style="background: #d4edda; color: #155724; padding: 15px; border-radius: 8px; margin-bottom: 15px; text-align: center;">
+                        🎉 欢迎新会员！您的账户已创建
+                    </div>
+                `;
+            } else {
+                html = `
+                    <div style="background: #d1ecf1; color: #0c5460; padding: 10px; border-radius: 8px; margin-bottom: 15px; text-align: center;">
+                        ✅ 欢迎回来！
+                    </div>
+                `;
+            }
+
+            html += `
+                <div class="points-card">
+                    <div style="font-size: 0.9em; opacity: 0.9;">当前积分</div>
+                    <div style="font-size: 3em; font-weight: bold; margin: 10px 0;">${profile.points}</div>
+                    <div>Points</div>
+                </div>
+
+                <div style="background: #f8f9fa; padding: 20px; border-radius: 12px; margin: 20px 0;">
+                    <div style="display: flex; justify-content: space-between; margin: 12px 0; padding: 8px 0; border-bottom: 1px solid #eee;">
+                        <span>会员姓名</span>
+                        <span style="font-weight: bold;">${profile.displayName}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin: 12px 0; padding: 8px 0;">
+                        <span>总消费额</span>
+                        <span style="font-weight: bold;">￥${(profile.totalSpent || 0).toLocaleString()}</span>
+                    </div>
+                </div>
+
+                <div style="background: #fff3cd; border: 2px solid #ffc107; border-radius: 10px; padding: 15px; margin: 20px 0;">
+                    <div style="font-weight: bold; color: #856404;">🔑 会员ID</div>
+                    <div style="background: white; padding: 10px; border-radius: 6px; font-family: 'Courier New', monospace; font-size: 0.8em; word-break: break-all; margin: 10px 0;">
+                        ${profile.userId}
+                    </div>
+                    <small style="color: #856404;">请向店员出示此ID进行积分操作</small>
+                </div>
+
+                <div style="text-align: center; margin-top: 30px;">
+                    <button onclick="location.reload()" 
+                            style="padding: 12px 24px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px;">
+                        刷新积分
+                    </button>
+                </div>
+            `;
+            
+            document.getElementById('profileContent').innerHTML = html;
+        }
+
+        // 页面加载后立即初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('页面加载完成，开始自动查询');
+            initializeLiffAndQuery();
+        });
+    </script>
 </body>
 </html>
