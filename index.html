@@ -53,6 +53,14 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        .login-info {
+            background: #fff3cd;
+            color: #856404;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            margin: 20px 0;
+        }
     </style>
 </head>
 <body>
@@ -64,7 +72,7 @@
         
         <div id="profileContent">
             <div class="loading">
-                <div>正在加载您的会员信息...</div>
+                <div>正在初始化...</div>
                 <div class="loading-spinner"></div>
             </div>
         </div>
@@ -74,7 +82,7 @@
         // 🔧 配置 - 请替换为您的实际信息
         const CONFIG = {
             LIFF_ID: '2008235894-KBlBRgrN',
-            GAS_URL: 'https://script.google.com/macros/s/AKfycbw6JEK8okALAqRjyu38M_KGvEH2S1M8N2hG3W3wl39iIJ-TPdv8BQi8HebNHYWsmSxG/exec' // 替换为您的GAS部署URL
+            GAS_URL: 'https://script.google.com/macros/s/AKfycbyvMRhQ_cxknZ0zWSYJDZuZbKTkcym-REVZpLAJzAhTlb8CTQcZGJGAqSOWLOfc8KMd/exec'
         };
 
         // 初始化LIFF并自动查询
@@ -93,18 +101,19 @@
                 await liff.init({ liffId: CONFIG.LIFF_ID });
                 console.log('✅ LIFF初始化成功');
                 
+                // 检查登录状态
                 if (!liff.isLoggedIn()) {
                     console.log('用户未登录，执行登录');
-                    liff.login();
+                    showLoginMessage();
+                    // 给用户一点时间看到提示信息
+                    setTimeout(() => {
+                        liff.login();
+                    }, 1000);
                     return;
                 }
 
-                // 获取LINE用户信息
-                const profile = await liff.getProfile();
-                console.log('✅ 获取LINE用户信息成功:', profile);
-                
-                // 使用JSONP方式调用Google Apps Script
-                await queryMemberDataViaJSONP(profile.userId, profile.displayName);
+                // 用户已登录，继续获取用户信息
+                await getUserInfoAndQuery();
                 
             } catch (error) {
                 console.error('❌ 自动查询失败:', error);
@@ -112,10 +121,41 @@
             }
         }
 
+        // 获取用户信息并查询
+        async function getUserInfoAndQuery() {
+            try {
+                console.log('获取LINE用户信息...');
+                showMessage('正在获取您的个人信息...');
+                
+                const profile = await liff.getProfile();
+                console.log('✅ 获取LINE用户信息成功:', profile);
+                
+                // 使用JSONP方式调用Google Apps Script
+                await queryMemberDataViaJSONP(profile.userId, profile.displayName);
+                
+            } catch (error) {
+                console.error('获取用户信息失败:', error);
+                showError('获取用户信息失败: ' + error.message);
+            }
+        }
+
+        // 显示登录提示信息
+        function showLoginMessage() {
+            document.getElementById('profileContent').innerHTML = `
+                <div class="login-info">
+                    <h3>🔐 需要登录</h3>
+                    <p>正在跳转到LINE登录页面...</p>
+                    <p><small>请授权访问您的LINE基本信息</small></p>
+                    <div class="loading-spinner"></div>
+                </div>
+            `;
+        }
+
         // 使用JSONP方式查询会员数据
         function queryMemberDataViaJSONP(userId, displayName) {
             return new Promise((resolve, reject) => {
                 console.log('开始JSONP查询:', userId);
+                showMessage('正在查询您的会员信息...');
                 
                 // 创建唯一的回调函数名
                 const callbackName = 'jsonpCallback_' + Date.now();
@@ -139,7 +179,9 @@
                 const script = document.createElement('script');
                 const url = `${CONFIG.GAS_URL}?method=getUserProfile&userId=${encodeURIComponent(userId)}&displayName=${encodeURIComponent(displayName || '')}&callback=${callbackName}`;
                 
+                console.log('发送JSONP请求:', url);
                 script.src = url;
+                
                 script.onerror = function() {
                     console.error('❌ JSONP请求失败');
                     delete window[callbackName];
@@ -196,6 +238,16 @@
                     <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0;">
                         <p><strong>如需查询积分，请联系店员</strong></p>
                     </div>
+                </div>
+            `;
+        }
+
+        // 显示消息
+        function showMessage(message) {
+            document.getElementById('profileContent').innerHTML = `
+                <div style="text-align: center; padding: 40px 20px; color: #667eea;">
+                    <div style="font-size: 1.2em; margin-bottom: 20px;">${message}</div>
+                    <div class="loading-spinner"></div>
                 </div>
             `;
         }
