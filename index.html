@@ -23,68 +23,14 @@
             border-radius: 20px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.2);
         }
-        .points-card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 25px;
-            border-radius: 15px;
-            text-align: center;
-            margin: 20px 0;
-        }
-        .loading, .error, .info {
-            text-align: center;
-            padding: 40px 20px;
-            border-radius: 10px;
-            margin: 10px 0;
-        }
-        .error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-        .info {
-            background: #d1ecf1;
-            color: #0c5460;
-            border: 1px solid #bee5eb;
-        }
-        .loading {
-            background: #e2e3e5;
-            color: #383d41;
-        }
-        .loading-spinner {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #667eea;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 2s linear infinite;
-            margin: 20px auto;
-        }
-        .retry-button {
-            padding: 10px 20px;
-            background: #667eea;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            margin: 10px 5px;
-            font-size: 14px;
-        }
-        .retry-button:hover {
-            background: #5a6fd8;
-        }
-        .error-details {
-            background: white;
+        .debug-panel {
+            background: #f8f9fa;
             padding: 10px;
             border-radius: 5px;
             margin-top: 10px;
             font-size: 12px;
             color: #666;
-            text-align: left;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            border-left: 4px solid #667eea;
         }
     </style>
 </head>
@@ -96,155 +42,162 @@
         </div>
         
         <div id="profileContent">
-            <div class="loading">
-                <div>正在初始化系统...</div>
-                <div class="loading-spinner"></div>
+            <div style="text-align: center; padding: 40px 20px;">
+                <div>正在初始化...</div>
+                <div style="margin-top: 20px;" id="debugInfo"></div>
             </div>
         </div>
     </div>
 
     <script>
-        // 🔧 配置
+        // 🔧 配置 - 请仔细检查这个URL
         const CONFIG = {
             LIFF_ID: '2008235894-KBlBRgrN',
-            GAS_URL: 'https://script.google.com/macros/s/AKfycbw666Bwgaem2do9Y3stnUQzVQmJ7_iMORut3GgsUHVsf347okaj69t0IY80D5O5Hc44/exec'
+            GAS_URL: 'https://script.google.com/macros/s/AKfycbxHbjEIF9vmX7lZwdNhT0aKcy9lFXMRwNqLYdpQhUBUKrHln4iSi1Bv878qQF_7SaPQ/exec'
         };
 
-        // 全局状态管理
-        const AppState = {
-            currentStep: 'init',
-            userId: null,
-            displayName: null,
-            retryCount: 0,
-            maxRetries: 3
-        };
+        // 调试日志
+        function debugLog(message) {
+            console.log('🔍', message);
+            const debugEl = document.getElementById('debugInfo');
+            if (debugEl) {
+                const timestamp = new Date().toLocaleTimeString();
+                debugEl.innerHTML += `[${timestamp}] ${message}<br>`;
+                debugEl.scrollTop = debugEl.scrollHeight;
+            }
+        }
+
+        // 测试GAS连接
+        async function testGASConnection() {
+            return new Promise((resolve, reject) => {
+                debugLog('测试GAS连接...');
+                
+                const testUrl = CONFIG.GAS_URL + '?method=getUserProfile&userId=test_user&displayName=Test&callback=testCallback';
+                const script = document.createElement('script');
+                
+                window.testCallback = function(data) {
+                    debugLog('✅ GAS连接测试成功');
+                    delete window.testCallback;
+                    document.head.removeChild(script);
+                    resolve(true);
+                };
+                
+                script.src = testUrl;
+                script.onerror = function() {
+                    debugLog('❌ GAS连接测试失败');
+                    delete window.testCallback;
+                    reject(new Error('无法连接到Google Apps Script'));
+                };
+                
+                document.head.appendChild(script);
+                
+                setTimeout(() => {
+                    if (window.testCallback) {
+                        debugLog('❌ GAS连接超时');
+                        delete window.testCallback;
+                        reject(new Error('连接超时'));
+                    }
+                }, 5000);
+            });
+        }
 
         // 主初始化函数
         async function initializeApp() {
             try {
-                updateUI('initializing', '正在初始化系统...');
+                debugLog('🚀 应用启动');
                 
-                // 检查环境
-                if (!isLINEEnvironment()) {
-                    updateUI('non_line', '请在LINE应用中打开此页面');
-                    return;
-                }
-
-                // 初始化LIFF
-                await initializeLIFF();
+                // 显示测试界面
+                showTestInterface();
                 
-                // 检查登录状态
-                if (!liff.isLoggedIn()) {
-                    await handleLogin();
-                    return;
-                }
-
-                // 获取用户信息并查询
-                await getUserInfoAndQuery();
-
+                // 测试GAS连接
+                await testGASConnection();
+                
+                debugLog('✅ 所有服务正常');
+                showSuccessMessage('系统就绪，可以开始测试');
+                
             } catch (error) {
-                handleFatalError('初始化失败', error);
+                debugLog('❌ 初始化失败: ' + error.message);
+                showErrorMessage('系统初始化失败: ' + error.message);
             }
         }
 
-        // 检查LINE环境
-        function isLINEEnvironment() {
-            const isLINE = /Line/i.test(navigator.userAgent);
-            console.log('环境检测:', isLINE ? 'LINE环境' : '非LINE环境');
-            return isLINE;
-        }
-
-        // 初始化LIFF
-        async function initializeLIFF() {
-            try {
-                updateUI('initializing', '正在连接LINE服务...');
-                await liff.init({ liffId: CONFIG.LIFF_ID });
-                console.log('✅ LIFF初始化成功');
-                return true;
-            } catch (error) {
-                console.error('❌ LIFF初始化失败:', error);
-                throw new Error(`LINE服务连接失败: ${error.message}`);
-            }
-        }
-
-        // 处理登录
-        async function handleLogin() {
-            try {
-                updateUI('login_required', '需要登录LINE账户...');
-                
-                // 显示登录提示
-                setTimeout(async () => {
-                    try {
-                        updateUI('redirecting', '正在跳转到登录页面...');
-                        await liff.login();
-                    } catch (loginError) {
-                        handleFatalError('登录失败', loginError);
-                    }
-                }, 1500);
-                
-            } catch (error) {
-                handleFatalError('登录流程错误', error);
-            }
-        }
-
-        // 获取用户信息并查询
-        async function getUserInfoAndQuery() {
-            try {
-                updateUI('loading', '正在获取用户信息...');
-                
-                const profile = await liff.getProfile();
-                AppState.userId = profile.userId;
-                AppState.displayName = profile.displayName;
-                
-                console.log('✅ 用户信息获取成功:', profile.userId);
-                
-                // 查询会员数据
-                await queryMemberData(profile.userId, profile.displayName);
-                
-            } catch (error) {
-                handleFatalError('获取用户信息失败', error);
-            }
-        }
-
-        // 查询会员数据（支持重试）
-        async function queryMemberData(userId, displayName) {
-            try {
-                updateUI('loading', '正在查询会员信息...');
-                
-                const result = await queryWithJSONP(userId, displayName);
-                handleQueryResult(result);
-                
-            } catch (error) {
-                // 重试逻辑
-                if (AppState.retryCount < AppState.maxRetries) {
-                    AppState.retryCount++;
-                    console.log(`第 ${AppState.retryCount} 次重试...`);
-                    updateUI('retrying', `查询失败，正在重试 (${AppState.retryCount}/${AppState.maxRetries})...`);
+        // 显示测试界面
+        function showTestInterface() {
+            document.getElementById('profileContent').innerHTML = `
+                <div style="text-align: center; padding: 20px;">
+                    <h3>🔧 系统测试界面</h3>
+                    <p style="color: #666; margin: 20px 0;">正在测试系统连接...</p>
                     
-                    setTimeout(() => {
-                        queryMemberData(userId, displayName);
-                    }, 2000);
-                } else {
-                    handleFatalError('会员信息查询失败', error);
-                }
+                    <div class="debug-panel" id="debugInfo">
+                        开始系统检测...<br>
+                    </div>
+                    
+                    <div style="margin-top: 30px;">
+                        <h4>测试功能</h4>
+                        <input type="text" id="testUserId" placeholder="输入测试用户ID" 
+                               style="padding: 10px; width: 200px; margin: 10px; border: 1px solid #ddd; border-radius: 5px;"
+                               value="test_user_001">
+                        <br>
+                        <button onclick="testUserQuery()" 
+                                style="padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 5px;">
+                            测试用户查询
+                        </button>
+                        <button onclick="testNewUser()" 
+                                style="padding: 10px 20px; background: #17a2b8; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 5px;">
+                            测试新用户
+                        </button>
+                        <button onclick="location.reload()" 
+                                style="padding: 10px 20px; background: #6c757d; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 5px;">
+                            重新加载
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        // 测试用户查询
+        async function testUserQuery() {
+            const userId = document.getElementById('testUserId').value.trim() || 'test_user_001';
+            debugLog('开始测试用户查询: ' + userId);
+            
+            try {
+                const result = await queryUserProfile(userId, '测试用户');
+                debugLog('✅ 查询成功: ' + JSON.stringify(result));
+                displayTestResult(result);
+            } catch (error) {
+                debugLog('❌ 查询失败: ' + error.message);
+                showErrorMessage('查询失败: ' + error.message);
             }
         }
 
-        // JSONP查询
-        function queryWithJSONP(userId, displayName) {
+        // 测试新用户
+        async function testNewUser() {
+            const newUserId = 'new_user_' + Date.now();
+            debugLog('开始测试新用户: ' + newUserId);
+            
+            try {
+                const result = await queryUserProfile(newUserId, '新用户');
+                debugLog('✅ 新用户创建成功: ' + JSON.stringify(result));
+                displayTestResult(result);
+            } catch (error) {
+                debugLog('❌ 新用户创建失败: ' + error.message);
+                showErrorMessage('创建失败: ' + error.message);
+            }
+        }
+
+        // 查询用户资料
+        function queryUserProfile(userId, displayName) {
             return new Promise((resolve, reject) => {
-                const callbackName = 'jsonpCallback_' + Date.now();
+                const callbackName = 'queryCallback_' + Date.now();
                 let timeoutId;
                 
-                // 超时处理
-                timeoutId = setTimeout(() => {
-                    cleanup();
-                    reject(new Error('请求超时（10秒）'));
-                }, 10000);
-                
-                // 回调函数
                 window[callbackName] = function(data) {
-                    cleanup();
+                    clearTimeout(timeoutId);
+                    delete window[callbackName];
+                    if (script.parentNode) {
+                        script.parentNode.removeChild(script);
+                    }
+                    
                     if (data) {
                         resolve(data);
                     } else {
@@ -252,232 +205,64 @@
                     }
                 };
                 
-                // 清理函数
-                function cleanup() {
+                const script = document.createElement('script');
+                const url = `${CONFIG.GAS_URL}?method=getUserProfile&userId=${encodeURIComponent(userId)}&displayName=${encodeURIComponent(displayName)}&callback=${callbackName}`;
+                
+                debugLog('发送请求: ' + url);
+                script.src = url;
+                
+                script.onerror = function() {
                     clearTimeout(timeoutId);
                     delete window[callbackName];
-                    if (script.parentNode) {
-                        script.parentNode.removeChild(script);
-                    }
-                }
-                
-                // 创建请求
-                const script = document.createElement('script');
-                const url = `${CONFIG.GAS_URL}?method=getUserProfile&userId=${encodeURIComponent(userId)}&displayName=${encodeURIComponent(displayName || '')}&callback=${callbackName}`;
-                
-                script.src = url;
-                script.onerror = () => {
-                    cleanup();
-                    reject(new Error('网络请求失败'));
+                    reject(new Error('网络请求失败 - 请检查GAS URL是否正确'));
                 };
                 
                 document.head.appendChild(script);
+                
+                timeoutId = setTimeout(() => {
+                    if (window[callbackName]) {
+                        delete window[callbackName];
+                        reject(new Error('请求超时'));
+                    }
+                }, 10000);
             });
         }
 
-        // 处理查询结果
-        function handleQueryResult(data) {
-            console.log('查询结果:', data);
-            
-            if (data.status === 'success') {
-                displayProfile(data.profile, data.isNewUser);
-            } else {
-                throw new Error(data.message || '服务器返回错误状态');
-            }
-        }
-
-        // 显示用户资料
-        function displayProfile(profile, isNewUser) {
-            let html = '';
-            
-            if (isNewUser) {
-                html = `
-                    <div style="background: #d4edda; color: #155724; padding: 15px; border-radius: 8px; margin-bottom: 15px; text-align: center;">
-                        🎉 欢迎新会员！您的账户已创建
+        // 显示测试结果
+        function displayTestResult(data) {
+            let html = `
+                <div style="background: #d4edda; color: #155724; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                    <h4>✅ 测试成功</h4>
+                    <div style="text-align: left; background: white; padding: 10px; border-radius: 5px; margin-top: 10px;">
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
                     </div>
-                `;
-            } else {
-                html = `
-                    <div style="background: #d1ecf1; color: #0c5460; padding: 10px; border-radius: 8px; margin-bottom: 15px; text-align: center;">
-                        ✅ 欢迎回来！
-                    </div>
-                `;
-            }
-
-            html += `
-                <div class="points-card">
-                    <div style="font-size: 0.9em; opacity: 0.9;">当前积分</div>
-                    <div style="font-size: 3em; font-weight: bold; margin: 10px 0;">${profile.points || 0}</div>
-                    <div>Points</div>
-                </div>
-
-                <div style="background: #f8f9fa; padding: 20px; border-radius: 12px; margin: 20px 0;">
-                    <div style="display: flex; justify-content: space-between; margin: 12px 0; padding: 8px 0; border-bottom: 1px solid #eee;">
-                        <span>会员姓名</span>
-                        <span style="font-weight: bold;">${profile.displayName || '顾客'}</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin: 12px 0; padding: 8px 0;">
-                        <span>总消费额</span>
-                        <span style="font-weight: bold;">￥${(profile.totalSpent || 0).toLocaleString()}</span>
-                    </div>
-                </div>
-
-                <div style="background: #fff3cd; border: 2px solid #ffc107; border-radius: 10px; padding: 15px; margin: 20px 0;">
-                    <div style="font-weight: bold; color: #856404;">🔑 会员ID</div>
-                    <div style="background: white; padding: 10px; border-radius: 6px; font-family: 'Courier New', monospace; font-size: 0.8em; word-break: break-all; margin: 10px 0;">
-                        ${profile.userId}
-                    </div>
-                    <small style="color: #856404;">请向店员出示此ID进行积分操作</small>
-                </div>
-
-                <div style="text-align: center; margin-top: 30px;">
-                    <button onclick="hardReload()" class="retry-button">
-                        刷新页面
-                    </button>
                 </div>
             `;
             
-            document.getElementById('profileContent').innerHTML = html;
+            // 添加到现有内容
+            const profileContent = document.getElementById('profileContent');
+            profileContent.innerHTML += html;
         }
 
-        // 更新UI状态
-        function updateUI(state, message, error = null) {
-            AppState.currentStep = state;
-            
-            let html = '';
-            
-            switch (state) {
-                case 'initializing':
-                case 'loading':
-                case 'retrying':
-                    html = `
-                        <div class="loading">
-                            <div>${message}</div>
-                            <div class="loading-spinner"></div>
-                        </div>
-                    `;
-                    break;
-                    
-                case 'login_required':
-                    html = `
-                        <div class="info">
-                            <h3>🔐 需要登录</h3>
-                            <p>${message}</p>
-                            <p><small>请授权访问您的LINE基本信息</small></p>
-                            <div class="loading-spinner"></div>
-                        </div>
-                    `;
-                    break;
-                    
-                case 'redirecting':
-                    html = `
-                        <div class="info">
-                            <h3>↪️ 正在跳转</h3>
-                            <p>${message}</p>
-                            <div class="loading-spinner"></div>
-                        </div>
-                    `;
-                    break;
-                    
-                case 'non_line':
-                    html = `
-                        <div class="info">
-                            <h3>📱 请在LINE中打开</h3>
-                            <p>${message}</p>
-                            <div style="margin-top: 20px;">
-                                <button onclick="showManualInput()" class="retry-button">
-                                    手动查询
-                                </button>
-                            </div>
-                        </div>
-                    `;
-                    break;
-                    
-                case 'error':
-                    html = `
-                        <div class="error">
-                            <h3>❌ 出错了</h3>
-                            <p>${message}</p>
-                            ${error ? `
-                                <div class="error-details">
-                                    <strong>错误详情:</strong><br>
-                                    ${error.message || error}
-                                </div>
-                            ` : ''}
-                            <div style="margin-top: 20px;">
-                                <button onclick="retryCurrentStep()" class="retry-button">
-                                    重试
-                                </button>
-                                <button onclick="hardReload()" class="retry-button">
-                                    重新加载
-                                </button>
-                            </div>
-                        </div>
-                    `;
-                    break;
+        // 显示成功消息
+        function showSuccessMessage(message) {
+            const debugEl = document.getElementById('debugInfo');
+            if (debugEl) {
+                debugEl.innerHTML += `<div style="color: green; font-weight: bold;">✅ ${message}</div>`;
             }
-            
-            document.getElementById('profileContent').innerHTML = html;
         }
 
-        // 处理严重错误
-        function handleFatalError(message, error) {
-            console.error('严重错误:', message, error);
-            updateUI('error', message, error);
-        }
-
-        // 重试当前步骤
-        function retryCurrentStep() {
-            AppState.retryCount = 0;
-            initializeApp();
-        }
-
-        // 强制重新加载
-        function hardReload() {
-            location.reload(true);
-        }
-
-        // 手动查询（非LINE环境使用）
-        function showManualInput() {
-            document.getElementById('profileContent').innerHTML = `
-                <div style="text-align: center; padding: 20px;">
-                    <h3>手动查询积分</h3>
-                    <p style="color: #666; margin-bottom: 20px;">请输入您的用户ID查询积分</p>
-                    <input type="text" id="manualUserId" placeholder="输入用户ID" 
-                           style="padding: 12px; width: 80%; margin: 10px; border: 2px solid #667eea; border-radius: 8px; font-size: 16px;">
-                    <br>
-                    <button onclick="manualQuery()" class="retry-button">
-                        查询积分
-                    </button>
-                </div>
-            `;
-        }
-
-        // 手动查询
-        function manualQuery() {
-            const userId = document.getElementById('manualUserId').value.trim();
-            if (!userId) {
-                alert('请输入用户ID');
-                return;
+        // 显示错误消息
+        function showErrorMessage(message) {
+            const debugEl = document.getElementById('debugInfo');
+            if (debugEl) {
+                debugEl.innerHTML += `<div style="color: red; font-weight: bold;">❌ ${message}</div>`;
             }
-            AppState.userId = userId;
-            AppState.displayName = '顾客';
-            queryMemberData(userId, '顾客');
         }
 
-        // 页面加载后初始化
+        // 页面加载
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('🚀 应用启动');
             initializeApp();
-        });
-
-        // 全局错误捕获
-        window.addEventListener('error', function(event) {
-            console.error('全局错误:', event.error);
-        });
-
-        window.addEventListener('unhandledrejection', function(event) {
-            console.error('未处理的Promise拒绝:', event.reason);
         });
     </script>
 </body>
