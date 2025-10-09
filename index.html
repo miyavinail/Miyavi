@@ -53,6 +53,15 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        .debug-info {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            color: #666;
+            margin-top: 10px;
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -66,6 +75,7 @@
             <div class="loading">
                 <div>正在加载您的会员信息...</div>
                 <div class="loading-spinner"></div>
+                <div id="debugInfo" class="debug-info"></div>
             </div>
         </div>
     </div>
@@ -75,77 +85,128 @@
             LIFF_ID: '2008235894-KBlBRgrN'
         };
 
+        // 调试信息输出
+        function debugLog(message) {
+            console.log('🔍 DEBUG:', message);
+            const debugEl = document.getElementById('debugInfo');
+            if (debugEl) {
+                debugEl.style.display = 'block';
+                debugEl.innerHTML += message + '<br>';
+            }
+        }
+
         // 初始化LIFF并自动查询
         async function initializeLiffAndQuery() {
-            console.log('=== 开始自动查询流程 ===');
+            debugLog('开始自动查询流程');
             
             try {
                 // 检查是否在LINE环境中
                 if (!/Line/i.test(navigator.userAgent)) {
-                    console.log('不在LINE环境中，显示提示信息');
+                    debugLog('不在LINE环境中，显示提示信息');
                     showNonLINEInfo();
                     return;
                 }
 
+                debugLog('检测到LINE环境，开始初始化LIFF');
+
                 // 初始化LIFF
                 await liff.init({ liffId: CONFIG.LIFF_ID });
-                console.log('✅ LIFF初始化成功');
+                debugLog('✅ LIFF初始化成功');
                 
                 if (!liff.isLoggedIn()) {
-                    console.log('用户未登录，执行登录');
+                    debugLog('用户未登录，执行登录');
                     liff.login();
                     return;
                 }
 
+                debugLog('用户已登录，获取用户信息');
+                
                 // 获取LINE用户信息
                 const profile = await liff.getProfile();
-                console.log('✅ 获取LINE用户信息成功:', profile);
+                debugLog('✅ 获取LINE用户信息成功: ' + profile.displayName);
                 
                 // 自动查询会员数据
                 await autoQueryMemberData(profile.userId, profile.displayName);
                 
             } catch (error) {
-                console.error('❌ 自动查询失败:', error);
+                debugLog('❌ 自动查询失败: ' + error.message);
                 showError('系统错误: ' + error.message);
             }
         }
 
         // 自动查询会员数据
         async function autoQueryMemberData(userId, displayName) {
-            console.log('开始自动查询会员数据:', userId, displayName);
+            debugLog('开始查询会员数据: ' + userId);
             
             showMessage('正在加载您的会员信息...');
             
             try {
                 // 使用google.script.run获取会员数据
+                debugLog('调用Google Apps Script...');
+                
                 google.script.run
                     .withSuccessHandler(function(data) {
-                        console.log('✅ 收到会员数据:', data);
+                        debugLog('✅ 收到服务器响应');
                         handleMemberDataResponse(data, userId, displayName);
                     })
                     .withFailureHandler(function(error) {
-                        console.error('❌ 获取会员数据失败:', error);
-                        showError('查询失败: ' + error.message, userId);
+                        debugLog('❌ Google Apps Script调用失败: ' + error);
+                        // 尝试备用方案：直接使用JSONP调用
+                        tryJsonpQuery(userId, displayName);
                     })
                     .getUserProfile(userId, displayName);
+                    
             } catch (error) {
-                console.error('查询异常:', error);
-                showError('系统异常: ' + error.message, userId);
+                debugLog('查询异常: ' + error.message);
+                // 尝试备用方案
+                tryJsonpQuery(userId, displayName);
             }
+        }
+
+        // 备用方案：使用JSONP查询
+        function tryJsonpQuery(userId, displayName) {
+            debugLog('尝试JSONP查询...');
+            
+            const script = document.createElement('script');
+            const callbackName = 'jsonpCallback_' + Date.now();
+            
+            window[callbackName] = function(data) {
+                debugLog('JSONP响应收到');
+                handleMemberDataResponse(data, userId, displayName);
+                delete window[callbackName];
+                document.head.removeChild(script);
+            };
+            
+            const url = `https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec?method=getUserProfile&userId=${encodeURIComponent(userId)}&displayName=${encodeURIComponent(displayName)}&callback=${callbackName}`;
+            script.src = url;
+            document.head.appendChild(script);
+            
+            // 设置超时
+            setTimeout(() => {
+                if (window[callbackName]) {
+                    debugLog('JSONP查询超时');
+                    showError('查询超时，请检查网络连接', userId);
+                    delete window[callbackName];
+                }
+            }, 10000);
         }
 
         // 处理会员数据响应
         function handleMemberDataResponse(data, userId, displayName) {
+            debugLog('处理响应数据: ' + JSON.stringify(data).substring(0, 100));
+            
             if (!data) {
-                console.error('收到空数据');
+                debugLog('收到空数据');
                 showError('服务器返回空数据，请稍后重试', userId);
                 return;
             }
             
             if (data.status === 'success') {
+                debugLog('✅ 数据获取成功');
                 // 成功获取数据，显示用户资料
                 displayProfile(data.profile, data.isNewUser);
             } else {
+                debugLog('❌ 数据获取失败: ' + data.message);
                 // 如果获取失败，显示错误信息
                 showError('查询失败: ' + (data.message || '未知错误'), userId);
             }
@@ -162,8 +223,39 @@
                     <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0;">
                         <p><strong>如需查询积分，请联系店员</strong></p>
                     </div>
+                    <button onclick="showManualInput()" 
+                            style="padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                        手动查询
+                    </button>
                 </div>
             `;
+        }
+
+        // 手动查询界面
+        function showManualInput() {
+            document.getElementById('profileContent').innerHTML = `
+                <div style="text-align: center; padding: 20px;">
+                    <h3>积分查询</h3>
+                    <p style="color: #666; margin-bottom: 20px;">请输入您的用户ID查询积分</p>
+                    <input type="text" id="manualUserId" placeholder="输入用户ID" 
+                           style="padding: 12px; width: 80%; margin: 10px; border: 2px solid #667eea; border-radius: 8px; font-size: 16px;">
+                    <button onclick="manualQuery()" 
+                            style="padding: 12px 24px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px;">
+                        查询积分
+                    </button>
+                </div>
+            `;
+        }
+
+        // 手动查询
+        function manualQuery() {
+            const userId = document.getElementById('manualUserId').value.trim();
+            if (!userId) {
+                alert('请输入用户ID');
+                return;
+            }
+            debugLog('手动查询: ' + userId);
+            autoQueryMemberData(userId, '顾客');
         }
 
         // 显示消息
@@ -172,6 +264,7 @@
                 <div style="text-align: center; padding: 40px 20px; color: #667eea;">
                     <div style="font-size: 1.2em; margin-bottom: 20px;">${message}</div>
                     <div class="loading-spinner"></div>
+                    <div id="debugInfo" class="debug-info"></div>
                 </div>
             `;
         }
@@ -185,6 +278,10 @@
                     <button onclick="location.reload()" 
                             style="padding: 10px 20px; background: #dc3545; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 10px;">
                         重新加载
+                    </button>
+                    <button onclick="showManualInput()" 
+                            style="padding: 10px 20px; background: #6c757d; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 10px;">
+                        手动查询
                     </button>
             `;
             
@@ -206,7 +303,7 @@
 
         // 显示用户资料
         function displayProfile(profile, isNewUser) {
-            console.log('显示用户资料:', profile);
+            debugLog('显示用户资料');
             
             let html = '';
             
@@ -227,14 +324,14 @@
             html += `
                 <div class="points-card">
                     <div style="font-size: 0.9em; opacity: 0.9;">当前积分</div>
-                    <div style="font-size: 3em; font-weight: bold; margin: 10px 0;">${profile.points}</div>
+                    <div style="font-size: 3em; font-weight: bold; margin: 10px 0;">${profile.points || 0}</div>
                     <div>Points</div>
                 </div>
 
                 <div style="background: #f8f9fa; padding: 20px; border-radius: 12px; margin: 20px 0;">
                     <div style="display: flex; justify-content: space-between; margin: 12px 0; padding: 8px 0; border-bottom: 1px solid #eee;">
                         <span>会员姓名</span>
-                        <span style="font-weight: bold;">${profile.displayName}</span>
+                        <span style="font-weight: bold;">${profile.displayName || '顾客'}</span>
                     </div>
                     <div style="display: flex; justify-content: space-between; margin: 12px 0; padding: 8px 0;">
                         <span>总消费额</span>
@@ -263,8 +360,17 @@
 
         // 页面加载后立即初始化
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('页面加载完成，开始自动查询');
+            debugLog('页面加载完成');
             initializeLiffAndQuery();
+            
+            // 设置超时保护
+            setTimeout(() => {
+                const content = document.getElementById('profileContent').innerHTML;
+                if (content.includes('正在加载您的会员信息')) {
+                    debugLog('加载超时，显示错误信息');
+                    showError('加载超时，请检查网络连接或重新打开页面');
+                }
+            }, 15000);
         });
     </script>
 </body>
