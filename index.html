@@ -59,11 +59,6 @@
             border-radius: 10px;
             margin: 20px 0;
         }
-        .retry-section {
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 1px solid #dee2e6;
-        }
     </style>
 </head>
 <body>
@@ -76,21 +71,6 @@
         <div id="profileContent">
             <div class="loading">初始化中...</div>
         </div>
-        
-        <!-- 固定的重试区域 -->
-        <div id="retrySection" class="retry-section" style="display: none;">
-            <div style="text-align: center;">
-                <p style="color: #666; margin-bottom: 15px;">遇到问题？</p>
-                <button onclick="location.reload()" 
-                        style="padding: 10px 20px; background: #6c757d; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 5px;">
-                    刷新页面
-                </button>
-                <button onclick="showManualInput()" 
-                        style="padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 5px;">
-                    手动输入
-                </button>
-            </div>
-        </div>
     </div>
 
     <script>
@@ -100,17 +80,18 @@
             GAS_WEB_APP_URL: 'https://member-api.miyavinail.workers.dev/'
         };
 
-        let initializationAttempts = 0;
-        const MAX_ATTEMPTS = 3;
-
-        // 显示重试区域
-        function showRetrySection() {
-            document.getElementById('retrySection').style.display = 'block';
+        // 检查是否是登录回调
+        function isLoginCallback() {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.has('code') || urlParams.has('liff.state') || urlParams.has('access_token') || urlParams.has('id_token');
         }
 
-        // 隐藏重试区域
-        function hideRetrySection() {
-            document.getElementById('retrySection').style.display = 'none';
+        // 清理URL参数（登录后）
+        function cleanUrl() {
+            if (isLoginCallback() && window.history.replaceState) {
+                const cleanUrl = window.location.origin + window.location.pathname;
+                window.history.replaceState({}, document.title, cleanUrl);
+            }
         }
 
         // 显示消息
@@ -124,30 +105,23 @@
         }
 
         // 显示错误
-        function showError(message, showRetry = true) {
-            console.error('显示错误:', message);
+        function showError(message) {
             document.getElementById('profileContent').innerHTML = `
                 <div class="error">
                     <h3>❌ 出错了</h3>
                     <p>${message}</p>
-                    ${showRetry ? `
-                        <div style="margin-top: 20px;">
-                            <button onclick="location.reload()" 
-                                    style="padding: 10px 20px; background: #dc3545; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 5px;">
-                                刷新重试
-                            </button>
-                            <button onclick="showManualInput()" 
-                                    style="padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 5px;">
-                                手动输入
-                            </button>
-                        </div>
-                    ` : ''}
+                    <div style="margin-top: 20px;">
+                        <button onclick="location.reload()" 
+                                style="padding: 10px 20px; background: #dc3545; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 5px;">
+                            刷新重试
+                        </button>
+                        <button onclick="showManualInput()" 
+                                style="padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 5px;">
+                            手动输入
+                        </button>
+                    </div>
                 </div>
             `;
-            
-            if (showRetry) {
-                showRetrySection();
-            }
         }
 
         // 显示登录提示
@@ -169,26 +143,28 @@
                     </div>
                 </div>
             `;
-            showRetrySection();
         }
 
-        // 处理登录
-        function handleLogin() {
+        // 处理登录 - 使用更可靠的方式
+        async function handleLogin() {
             console.log('开始登录流程');
             showMessage('正在跳转到LINE登录...');
             
             try {
+                // 使用当前页面作为重定向URI
+                const redirectUri = window.location.href.split('?')[0]; // 移除现有参数
+                
                 // 设置超时检查
                 setTimeout(() => {
-                    const content = document.getElementById('profileContent').innerHTML;
-                    if (content.includes('正在跳转到LINE登录')) {
-                        console.log('登录可能卡住了，显示重试选项');
-                        showError('登录可能未完成，请重试或使用手动输入');
+                    if (document.getElementById('profileContent').innerHTML.includes('正在跳转到LINE登录')) {
+                        console.log('登录可能卡住了，提示用户');
+                        showError('登录可能未完成，请返回LINE应用查看或使用手动输入');
                     }
-                }, 5000);
+                }, 3000);
 
-                // 执行登录
-                liff.login();
+                // 执行登录重定向
+                liff.login({ redirectUri: redirectUri });
+                
             } catch (error) {
                 console.error('登录出错:', error);
                 showError('登录失败: ' + error.message);
@@ -210,7 +186,6 @@
                     </button>
                 </div>
             `;
-            hideRetrySection();
         }
 
         // 手动查询
@@ -228,7 +203,6 @@
         // 加载会员数据
         async function loadMemberData(userId, displayName) {
             showMessage('正在加载会员信息...');
-            hideRetrySection();
             
             try {
                 const params = new URLSearchParams({
@@ -304,25 +278,26 @@
             `;
             
             document.getElementById('profileContent').innerHTML = html;
-            hideRetrySection();
         }
 
         // 主要的初始化函数
         async function initializeApp() {
-            initializationAttempts++;
-            console.log(`初始化尝试 ${initializationAttempts}/${MAX_ATTEMPTS}`);
-            
-            if (initializationAttempts > MAX_ATTEMPTS) {
-                showError('初始化多次失败，请使用手动输入功能', true);
-                return;
-            }
-
             try {
                 console.log('开始初始化LIFF...');
                 
+                // 如果是登录回调，先清理URL
+                if (isLoginCallback()) {
+                    console.log('检测到登录回调，清理URL');
+                    cleanUrl();
+                }
+                
                 // 初始化LIFF
                 await liff.init({ liffId: CONFIG.LIFF_ID });
-                console.log('LIFF初始化成功');
+                console.log('LIFF初始化成功', {
+                    isLoggedIn: liff.isLoggedIn(),
+                    isInClient: liff.isInClient(),
+                    os: liff.getOS()
+                });
                 
                 // 检查登录状态
                 if (liff.isLoggedIn()) {
@@ -340,13 +315,13 @@
                 
                 // 根据错误类型显示不同的提示
                 if (error.message.includes('not in')) {
-                    showError('请在LINE应用中打开此页面', true);
+                    showManualInput();
                 } else if (error.message.includes('LIFF_ID')) {
-                    showError('应用配置错误，请联系管理员', true);
+                    showError('应用配置错误，请联系管理员');
                 } else if (error.message.includes('network')) {
-                    showError('网络连接失败，请检查网络后重试', true);
+                    showError('网络连接失败，请检查网络后重试');
                 } else {
-                    showError('初始化失败: ' + error.message, true);
+                    showError('初始化失败: ' + error.message);
                 }
             }
         }
@@ -354,18 +329,8 @@
         // 页面加载
         window.onload = function() {
             console.log('页面加载完成，开始初始化');
-            hideRetrySection();
             initializeApp();
         };
-
-        // 添加全局错误处理
-        window.addEventListener('error', function(event) {
-            console.error('全局错误:', event.error);
-        });
-
-        window.addEventListener('unhandledrejection', function(event) {
-            console.error('未处理的Promise拒绝:', event.reason);
-        });
     </script>
 </body>
 </html>
