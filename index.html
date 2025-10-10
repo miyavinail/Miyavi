@@ -147,7 +147,7 @@
             }
         }
 
-        // 改进的LIFF初始化
+        // 改进的LIFF初始化 - 修复逻辑冲突
         async function initializeLiff() {
             if (isInitializing) {
                 addDebugLog('初始化已在进行中，跳过');
@@ -161,7 +161,6 @@
                 // 更准确的LINE环境检测
                 const userAgent = navigator.userAgent.toLowerCase();
                 const isInLine = userAgent.includes('line') || 
-                                window.navigator.standalone || 
                                 document.referrer.includes('line.me');
                 
                 addDebugLog('环境检测结果', {
@@ -197,7 +196,7 @@
                     version: liff.getVersion()
                 });
 
-                // 检查登录状态
+                // 检查登录状态 - 修复逻辑：显示登录提示而不是自动登录
                 if (!liff.isLoggedIn()) {
                     addDebugLog('用户未登录，显示登录提示');
                     showLoginPrompt();
@@ -265,6 +264,7 @@
                     signal: controller.signal,
                     headers: {
                         'Accept': 'application/json',
+                    'Content-Type': 'application/json'
                     }
                 });
                 
@@ -461,14 +461,19 @@
             showMessage('系统初始化中...');
             
             // 先检查后端服务
-            const isHealthy = await healthCheck();
-            if (!isHealthy) {
-                showError('后端服务暂时不可用，请稍后重试');
-                return;
+            try {
+                const isHealthy = await healthCheck();
+                if (!isHealthy) {
+                    showError('后端服务暂时不可用，请稍后重试');
+                    return;
+                }
+                
+                addDebugLog('后端服务正常，开始初始化LIFF');
+                await initializeLiff();
+            } catch (error) {
+                addDebugLog('初始化过程出错', error.message);
+                showManualInputWithError('初始化失败: ' + error.message);
             }
-            
-            addDebugLog('后端服务正常，开始初始化LIFF');
-            await initializeLiff();
         };
     </script>
 </body>
