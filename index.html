@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <base target="_top">
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>我的会员积分</title>
@@ -23,14 +22,35 @@
             border-radius: 20px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.2);
         }
-        .debug-panel {
-            background: #f8f9fa;
-            padding: 10px;
-            border-radius: 5px;
-            margin-top: 10px;
-            font-size: 12px;
-            color: #666;
-            border-left: 4px solid #667eea;
+        .points-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 15px;
+            text-align: center;
+            margin: 20px 0;
+        }
+        .loading, .error {
+            text-align: center;
+            padding: 40px 20px;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border-radius: 10px;
+        }
+        .loading-spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     </style>
 </head>
@@ -42,228 +62,198 @@
         </div>
         
         <div id="profileContent">
-            <div style="text-align: center; padding: 40px 20px;">
-                <div>正在初始化...</div>
-                <div style="margin-top: 20px;" id="debugInfo"></div>
-            </div>
+            <div class="loading">初始化中...</div>
         </div>
     </div>
 
     <script>
-        // 🔧 配置 - 请仔细检查这个URL
         const CONFIG = {
             LIFF_ID: '2008235894-KBlBRgrN',
-            GAS_URL: 'https://script.google.com/macros/s/AKfycbxHbjEIF9vmX7lZwdNhT0aKcy9lFXMRwNqLYdpQhUBUKrHln4iSi1Bv878qQF_7SaPQ/exec'
+            GAS_WEB_APP_URL: 'https://script.google.com/macros/s/AKfycbwE9u3I4m_T3QEB6J1DUtYpzHsDdk3xkLIzBxp6i2qRRSvg33sDP6t_bSMKycIpLPU/exec'
         };
 
-        // 调试日志
-        function debugLog(message) {
-            console.log('🔍', message);
-            const debugEl = document.getElementById('debugInfo');
-            if (debugEl) {
-                const timestamp = new Date().toLocaleTimeString();
-                debugEl.innerHTML += `[${timestamp}] ${message}<br>`;
-                debugEl.scrollTop = debugEl.scrollHeight;
-            }
-        }
-
-        // 测试GAS连接
-        async function testGASConnection() {
-            return new Promise((resolve, reject) => {
-                debugLog('测试GAS连接...');
-                
-                const testUrl = CONFIG.GAS_URL + '?method=getUserProfile&userId=test_user&displayName=Test&callback=testCallback';
-                const script = document.createElement('script');
-                
-                window.testCallback = function(data) {
-                    debugLog('✅ GAS连接测试成功');
-                    delete window.testCallback;
-                    document.head.removeChild(script);
-                    resolve(true);
-                };
-                
-                script.src = testUrl;
-                script.onerror = function() {
-                    debugLog('❌ GAS连接测试失败');
-                    delete window.testCallback;
-                    reject(new Error('无法连接到Google Apps Script'));
-                };
-                
-                document.head.appendChild(script);
-                
-                setTimeout(() => {
-                    if (window.testCallback) {
-                        debugLog('❌ GAS连接超时');
-                        delete window.testCallback;
-                        reject(new Error('连接超时'));
-                    }
-                }, 5000);
-            });
-        }
-
-        // 主初始化函数
-        async function initializeApp() {
+        // 初始化LIFF
+        async function initializeLiff() {
+            console.log('=== LIFF初始化开始 ===');
+            
             try {
-                debugLog('🚀 应用启动');
+                // 检查是否在LINE环境中
+                if (!/Line/i.test(navigator.userAgent)) {
+                    console.log('不在LINE环境中，显示手动输入');
+                    showManualInput();
+                    return;
+                }
+
+                // 初始化LIFF
+                await liff.init({ liffId: CONFIG.LIFF_ID });
+                console.log('✅ LIFF初始化成功');
                 
-                // 显示测试界面
-                showTestInterface();
+                if (!liff.isLoggedIn()) {
+                    console.log('用户未登录，执行登录');
+                    liff.login();
+                    return;
+                }
+
+                // 获取LINE用户信息
+                const profile = await liff.getProfile();
+                console.log('✅ 获取LINE用户信息成功:', profile);
                 
-                // 测试GAS连接
-                await testGASConnection();
-                
-                debugLog('✅ 所有服务正常');
-                showSuccessMessage('系统就绪，可以开始测试');
+                // 使用fetch API获取会员数据
+                loadMemberData(profile.userId, profile.displayName);
                 
             } catch (error) {
-                debugLog('❌ 初始化失败: ' + error.message);
-                showErrorMessage('系统初始化失败: ' + error.message);
+                console.error('❌ LIFF初始化失败:', error);
+                showManualInput();
             }
         }
 
-        // 显示测试界面
-        function showTestInterface() {
+        // 使用fetch API加载会员数据
+        async function loadMemberData(userId, displayName) {
+            console.log('开始加载会员数据:', userId, displayName);
+            
+            showMessage('正在加载您的会员信息...');
+            
+            try {
+                const url = `${CONFIG.GAS_WEB_APP_URL}?method=getUserProfileWithName&userId=${encodeURIComponent(userId)}&displayName=${encodeURIComponent(displayName || '')}`;
+                console.log('请求URL:', url);
+                
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                console.log('✅ 收到会员数据:', data);
+                
+                if (!data) {
+                    throw new Error('服务器返回空数据');
+                }
+                
+                if (data.status === 'success') {
+                    displayProfile(data.profile, data.isNewUser);
+                } else {
+                    throw new Error(data.message || '未知错误');
+                }
+            } catch (error) {
+                console.error('❌ 获取会员数据失败:', error);
+                showError('系统错误: ' + error.message, userId);
+            }
+        }
+
+        // 显示手动输入界面
+        function showManualInput() {
             document.getElementById('profileContent').innerHTML = `
                 <div style="text-align: center; padding: 20px;">
-                    <h3>🔧 系统测试界面</h3>
-                    <p style="color: #666; margin: 20px 0;">正在测试系统连接...</p>
-                    
-                    <div class="debug-panel" id="debugInfo">
-                        开始系统检测...<br>
-                    </div>
-                    
-                    <div style="margin-top: 30px;">
-                        <h4>测试功能</h4>
-                        <input type="text" id="testUserId" placeholder="输入测试用户ID" 
-                               style="padding: 10px; width: 200px; margin: 10px; border: 1px solid #ddd; border-radius: 5px;"
-                               value="test_user_001">
-                        <br>
-                        <button onclick="testUserQuery()" 
-                                style="padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 5px;">
-                            测试用户查询
-                        </button>
-                        <button onclick="testNewUser()" 
-                                style="padding: 10px 20px; background: #17a2b8; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 5px;">
-                            测试新用户
-                        </button>
-                        <button onclick="location.reload()" 
-                                style="padding: 10px 20px; background: #6c757d; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 5px;">
-                            重新加载
-                        </button>
+                    <h3>积分查询</h3>
+                    <p style="color: #666; margin-bottom: 20px;">请输入您的用户ID查询积分</p>
+                    <input type="text" id="manualUserId" placeholder="输入用户ID" 
+                           style="padding: 12px; width: 80%; margin: 10px; border: 2px solid #667eea; border-radius: 8px; font-size: 16px;">
+                    <button onclick="manualQuery()" 
+                            style="padding: 12px 24px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px;">
+                        查询积分
+                    </button>
+                    <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                        <small>提示：用户ID可以在之前的记录中找到，或向店员询问</small>
                     </div>
                 </div>
             `;
         }
 
-        // 测试用户查询
-        async function testUserQuery() {
-            const userId = document.getElementById('testUserId').value.trim() || 'test_user_001';
-            debugLog('开始测试用户查询: ' + userId);
-            
-            try {
-                const result = await queryUserProfile(userId, '测试用户');
-                debugLog('✅ 查询成功: ' + JSON.stringify(result));
-                displayTestResult(result);
-            } catch (error) {
-                debugLog('❌ 查询失败: ' + error.message);
-                showErrorMessage('查询失败: ' + error.message);
+        // 手动查询
+        function manualQuery() {
+            const userId = document.getElementById('manualUserId').value.trim();
+            if (!userId) {
+                alert('请输入用户ID');
+                return;
             }
+            console.log('手动查询用户ID:', userId);
+            loadMemberData(userId, '顾客');
         }
 
-        // 测试新用户
-        async function testNewUser() {
-            const newUserId = 'new_user_' + Date.now();
-            debugLog('开始测试新用户: ' + newUserId);
-            
-            try {
-                const result = await queryUserProfile(newUserId, '新用户');
-                debugLog('✅ 新用户创建成功: ' + JSON.stringify(result));
-                displayTestResult(result);
-            } catch (error) {
-                debugLog('❌ 新用户创建失败: ' + error.message);
-                showErrorMessage('创建失败: ' + error.message);
-            }
+        // 显示消息
+        function showMessage(message) {
+            document.getElementById('profileContent').innerHTML = `
+                <div style="text-align: center; padding: 40px 20px; color: #667eea;">
+                    <div style="font-size: 1.2em; margin-bottom: 10px;">${message}</div>
+                    <div class="loading-spinner"></div>
+                </div>
+            `;
         }
 
-        // 查询用户资料
-        function queryUserProfile(userId, displayName) {
-            return new Promise((resolve, reject) => {
-                const callbackName = 'queryCallback_' + Date.now();
-                let timeoutId;
-                
-                window[callbackName] = function(data) {
-                    clearTimeout(timeoutId);
-                    delete window[callbackName];
-                    if (script.parentNode) {
-                        script.parentNode.removeChild(script);
-                    }
-                    
-                    if (data) {
-                        resolve(data);
-                    } else {
-                        reject(new Error('服务器返回空数据'));
-                    }
-                };
-                
-                const script = document.createElement('script');
-                const url = `${CONFIG.GAS_URL}?method=getUserProfile&userId=${encodeURIComponent(userId)}&displayName=${encodeURIComponent(displayName)}&callback=${callbackName}`;
-                
-                debugLog('发送请求: ' + url);
-                script.src = url;
-                
-                script.onerror = function() {
-                    clearTimeout(timeoutId);
-                    delete window[callbackName];
-                    reject(new Error('网络请求失败 - 请检查GAS URL是否正确'));
-                };
-                
-                document.head.appendChild(script);
-                
-                timeoutId = setTimeout(() => {
-                    if (window[callbackName]) {
-                        delete window[callbackName];
-                        reject(new Error('请求超时'));
-                    }
-                }, 10000);
-            });
-        }
-
-        // 显示测试结果
-        function displayTestResult(data) {
+        // 显示错误
+        function showError(message, userId = '') {
             let html = `
-                <div style="background: #d4edda; color: #155724; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                    <h4>✅ 测试成功</h4>
-                    <div style="text-align: left; background: white; padding: 10px; border-radius: 5px; margin-top: 10px;">
-                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                <div class="error">
+                    <h3>❌ 查询失败</h3>
+                    <p>${message}</p>
+                    <button onclick="showManualInput()" 
+                            style="padding: 10px 20px; background: #dc3545; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 10px;">
+                        重新输入
+                    </button>
+            `;
+            
+            if (userId) {
+                html += `
+                    <div style="margin-top: 15px; padding: 10px; background: white; border-radius: 5px;">
+                        <strong>您的用户ID:</strong> ${userId}<br>
+                        <small>请妥善保存此ID，或向店员提供</small>
                     </div>
+                `;
+            }
+            
+            html += `</div>`;
+            document.getElementById('profileContent').innerHTML = html;
+        }
+
+        // 显示用户资料
+        function displayProfile(profile, isNewUser) {
+            console.log('显示用户资料:', profile);
+            
+            let html = '';
+            
+            if (isNewUser) {
+                html = `
+                    <div style="background: #d4edda; color: #155724; padding: 15px; border-radius: 8px; margin-bottom: 15px; text-align: center;">
+                        🎉 欢迎新会员！您的账户已创建
+                    </div>
+                `;
+            } else {
+                html = `
+                    <div style="background: #d1ecf1; color: #0c5460; padding: 10px; border-radius: 8px; margin-bottom: 15px; text-align: center;">
+                        ✅ 欢迎回来！
+                    </div>
+                `;
+            }
+
+            html += `
+                <div class="points-card">
+                    <div style="font-size: 0.9em; opacity: 0.9;">当前积分</div>
+                    <div style="font-size: 3em; font-weight: bold; margin: 10px 0;">${profile.points}</div>
+                    <div>Points</div>
+                </div>
+
+                <div style="background: #f8f9fa; padding: 20px; border-radius: 12px; margin: 20px 0;">
+                    <div style="display: flex; justify-content: space-between; margin: 12px 0; padding: 8px 0; border-bottom: 1px solid #eee;">
+                        <span>会员姓名</span>
+                        <span style="font-weight: bold;">${profile.displayName}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin: 12px 0; padding: 8px 0;">
+                        <span>总消费额</span>
+                        <span style="font-weight: bold;">￥${(profile.totalSpent || 0).toLocaleString()}</span>
+                    </div>
+                </div>
+
+                <div style="background: #fff3cd; border: 2px solid #ffc107; border-radius: 10px; padding: 15px; margin: 20px 0;">
+                    <div style="font-weight: bold; color: #856404;">🔑 会员ID</div>
+                    <div style="background: white; padding: 10px; border-radius: 6px; font-family: 'Courier New', monospace; font-size: 0.8em; word-break: break-all; margin: 10px 0;">
+                        ${profile.userId}
+                    </div>
+                    <small style="color: #856404;">请向店员出示此ID进行积分操作</small>
                 </div>
             `;
             
-            // 添加到现有内容
-            const profileContent = document.getElementById('profileContent');
-            profileContent.innerHTML += html;
+            document.getElementById('profileContent').innerHTML = html;
         }
 
-        // 显示成功消息
-        function showSuccessMessage(message) {
-            const debugEl = document.getElementById('debugInfo');
-            if (debugEl) {
-                debugEl.innerHTML += `<div style="color: green; font-weight: bold;">✅ ${message}</div>`;
-            }
-        }
-
-        // 显示错误消息
-        function showErrorMessage(message) {
-            const debugEl = document.getElementById('debugInfo');
-            if (debugEl) {
-                debugEl.innerHTML += `<div style="color: red; font-weight: bold;">❌ ${message}</div>`;
-            }
-        }
-
-        // 页面加载
-        document.addEventListener('DOMContentLoaded', function() {
-            initializeApp();
-        });
+        // 页面加载后初始化
+        window.onload = initializeLiff;
     </script>
 </body>
 </html>
