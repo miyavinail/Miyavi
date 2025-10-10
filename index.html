@@ -6,7 +6,6 @@
     <title>我的会员积分</title>
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     <style>
-        /* 原有样式保持不变 */
         body { 
             font-family: Arial, sans-serif; 
             margin: 0; 
@@ -23,31 +22,51 @@
             border-radius: 20px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.2);
         }
+        .points-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 15px;
+            text-align: center;
+            margin: 20px 0;
+        }
+        .loading, .error {
+            text-align: center;
+            padding: 40px 20px;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border-radius: 10px;
+        }
+        .loading-spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
         .debug-info {
             background: #f8f9fa;
             border: 1px solid #dee2e6;
             border-radius: 8px;
-            padding: 15px;
-            margin: 15px 0;
+            padding: 10px;
+            margin: 10px 0;
             font-size: 12px;
             color: #666;
             display: none;
-        }
-        .debug-toggle {
-            background: #6c757d;
-            color: white;
-            border: none;
-            padding: 5px 10px;
-            border-radius: 4px;
-            font-size: 12px;
-            cursor: pointer;
-            margin: 10px 0;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <button class="debug-toggle" onclick="toggleDebug()">显示调试信息</button>
+        <button onclick="toggleDebug()" style="padding: 5px 10px; font-size: 12px; margin-bottom: 10px;">调试信息</button>
         <div id="debugInfo" class="debug-info"></div>
         
         <div style="text-align: center; margin-bottom: 20px;">
@@ -67,27 +86,18 @@
             GAS_WEB_APP_URL: 'https://member-api.miyavinail.workers.dev/'
         };
 
-        // 调试信息收集
-        const debugLogs = [];
+        let debugLogs = [];
 
-        function logDebug(message, data = null) {
+        function addDebugLog(message, data = null) {
             const timestamp = new Date().toLocaleTimeString();
-            const logEntry = { timestamp, message, data };
+            const logEntry = `[${timestamp}] ${message} ${data ? JSON.stringify(data) : ''}`;
             debugLogs.push(logEntry);
-            console.log(`[${timestamp}] ${message}`, data || '');
+            console.log(logEntry);
             
             // 更新调试显示
-            updateDebugDisplay();
-        }
-
-        function updateDebugDisplay() {
             const debugDiv = document.getElementById('debugInfo');
             if (debugDiv) {
-                debugDiv.innerHTML = debugLogs.map(log => 
-                    `<div><strong>[${log.timestamp}]</strong> ${log.message} ${
-                        log.data ? JSON.stringify(log.data) : ''
-                    }</div>`
-                ).join('');
+                debugDiv.innerHTML = debugLogs.join('<br>');
             }
         }
 
@@ -98,57 +108,57 @@
 
         // 改进的LIFF初始化
         async function initializeLiff() {
-            logDebug('=== LIFF初始化开始 ===');
+            addDebugLog('=== LIFF初始化开始 ===');
             
             try {
                 // 更准确的LINE环境检测
-                const userAgent = navigator.userAgent;
-                const isInLine = /Line/i.test(userAgent) || 
+                const userAgent = navigator.userAgent.toLowerCase();
+                const isInLine = userAgent.includes('line') || 
                                 window.navigator.standalone || 
                                 document.referrer.includes('line.me');
                 
-                logDebug('环境检测', {
-                    userAgent: userAgent.substring(0, 100),
-                    isInLine,
+                addDebugLog('环境检测结果', {
+                    userAgent: navigator.userAgent.substring(0, 50),
+                    isInLine: isInLine,
                     referrer: document.referrer
                 });
 
                 if (!isInLine) {
-                    logDebug('不在LINE环境中，显示手动输入');
+                    addDebugLog('不在LINE环境中，显示手动输入');
                     showManualInput();
                     return;
                 }
 
-                logDebug('开始初始化LIFF SDK');
+                addDebugLog('开始初始化LIFF...');
                 
                 // 添加超时控制
                 const initPromise = liff.init({ 
-                    liffId: CONFIG.LIFF_ID 
+                    liffId: CONFIG.LIFF_ID
                 });
                 
+                // 10秒超时
                 const timeoutPromise = new Promise((_, reject) => {
-                    setTimeout(() => reject(new Error('LIFF初始化超时')), 10000);
+                    setTimeout(() => reject(new Error('LIFF初始化超时(10秒)')), 10000);
                 });
                 
                 await Promise.race([initPromise, timeoutPromise]);
                 
-                logDebug('✅ LIFF初始化成功', {
+                addDebugLog('✅ LIFF初始化成功', {
                     isLoggedIn: liff.isLoggedIn(),
                     isInClient: liff.isInClient(),
                     os: liff.getOS(),
-                    language: liff.getLanguage(),
                     version: liff.getVersion()
                 });
 
                 if (!liff.isLoggedIn()) {
-                    logDebug('用户未登录，执行登录');
+                    addDebugLog('用户未登录，执行登录');
                     liff.login();
                     return;
                 }
 
-                logDebug('开始获取用户信息');
+                addDebugLog('开始获取用户信息...');
                 const profile = await liff.getProfile();
-                logDebug('✅ 获取LINE用户信息成功', {
+                addDebugLog('✅ 获取用户信息成功', {
                     userId: profile.userId,
                     displayName: profile.displayName.substring(0, 20) + '...'
                 });
@@ -156,30 +166,35 @@
                 await loadMemberData(profile.userId, profile.displayName);
                 
             } catch (error) {
-                logDebug('❌ LIFF初始化失败', {
+                addDebugLog('❌ LIFF初始化失败', {
                     error: error.message,
-                    stack: error.stack
+                    name: error.name
                 });
                 
-                // 根据错误类型处理
+                let errorMessage = '初始化失败: ' + error.message;
+                
                 if (error.message.includes('LIFF_ID')) {
-                    showError('应用配置错误，请联系管理员');
+                    errorMessage = '应用配置错误，请联系管理员';
+                } else if (error.message.includes('network') || error.message.includes('Network')) {
+                    errorMessage = '网络连接失败，请检查网络后重试';
                 } else if (error.message.includes('timeout')) {
-                    showError('连接超时，请检查网络后重试');
-                } else {
-                    showManualInputWithError('自动获取失败: ' + error.message);
+                    errorMessage = '连接超时，请稍后重试';
+                } else if (error.message.includes('not in')) {
+                    errorMessage = '请在LINE应用中打开此页面';
                 }
+                
+                showManualInputWithError(errorMessage);
             }
         }
 
-        // 改进的会员数据加载
+        // 加载会员数据
         async function loadMemberData(userId, displayName) {
-            logDebug('开始加载会员数据', { userId, displayName });
+            addDebugLog('开始加载会员数据', { userId, displayName });
             
             showMessage('正在加载您的会员信息...');
             
             try {
-                // 构建URL - 使用更简单的方式
+                // 构建URL参数
                 const params = new URLSearchParams({
                     method: 'getUserProfile',
                     userId: userId,
@@ -188,11 +203,11 @@
                 });
                 
                 const url = `${CONFIG.GAS_WEB_APP_URL}?${params}`;
-                logDebug('请求URL', { url: url.substring(0, 100) + '...' });
+                addDebugLog('请求URL', url);
 
                 // 添加请求超时
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 15000);
+                const timeoutId = setTimeout(() => controller.abort(), 10000);
                 
                 const response = await fetch(url, {
                     method: 'GET',
@@ -204,32 +219,32 @@
                 
                 clearTimeout(timeoutId);
                 
-                logDebug('收到响应', {
+                addDebugLog('收到响应', {
                     status: response.status,
                     statusText: response.statusText,
                     ok: response.ok
                 });
 
                 if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    throw new Error(`HTTP错误: ${response.status}`);
                 }
 
                 const data = await response.json();
-                logDebug('API响应数据', data);
+                addDebugLog('API响应', data);
                 
                 if (data.status === 'success') {
                     displayProfile(data.profile, data.isNewUser);
                 } else {
-                    throw new Error(data.message || '未知错误');
+                    throw new Error(data.message || '服务器返回错误');
                 }
                 
             } catch (error) {
-                logDebug('获取会员数据错误', {
+                addDebugLog('加载会员数据失败', {
                     error: error.message,
                     name: error.name
                 });
                 
-                let errorMessage = '系统错误: ' + error.message;
+                let errorMessage = '加载失败: ' + error.message;
                 if (error.name === 'AbortError') {
                     errorMessage = '请求超时，请检查网络连接';
                 }
@@ -238,19 +253,25 @@
             }
         }
 
-        // 显示手动输入界面（带错误信息）
+        // 显示手动输入界面
+        function showManualInput() {
+            showManualInputWithError('请在LINE应用中打开此页面，或手动输入用户ID');
+        }
+
+        // 显示手动输入（带错误信息）
         function showManualInputWithError(errorMsg) {
             document.getElementById('profileContent').innerHTML = `
                 <div style="text-align: center; padding: 20px;">
-                    <div style="color: #dc3545; background: #f8d7da; padding: 10px; border-radius: 8px; margin-bottom: 15px;">
+                    <div style="color: #dc3545; background: #f8d7da; padding: 12px; border-radius: 8px; margin-bottom: 20px;">
                         ⚠️ ${errorMsg}
                     </div>
-                    <h3>积分查询</h3>
+                    <h3 style="margin-bottom: 10px;">积分查询</h3>
                     <p style="color: #666; margin-bottom: 20px;">请输入您的用户ID查询积分</p>
                     <input type="text" id="manualUserId" placeholder="输入用户ID" 
-                           style="padding: 12px; width: 80%; margin: 10px; border: 2px solid #667eea; border-radius: 8px; font-size: 16px;">
+                           style="padding: 12px; width: 80%; margin: 10px 0; border: 2px solid #667eea; border-radius: 8px; font-size: 16px;">
+                    <br>
                     <button onclick="manualQuery()" 
-                            style="padding: 12px 24px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px;">
+                            style="padding: 12px 24px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; margin: 10px 0;">
                         查询积分
                     </button>
                     <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
@@ -260,11 +281,18 @@
             `;
         }
 
-        // 其他函数保持不变（showMessage, showError, displayProfile, manualQuery等）
-        function showManualInput() {
-            showManualInputWithError('请在LINE应用中打开此页面');
+        // 手动查询
+        function manualQuery() {
+            const userId = document.getElementById('manualUserId').value.trim();
+            if (!userId) {
+                alert('请输入用户ID');
+                return;
+            }
+            addDebugLog('手动查询用户ID:', userId);
+            loadMemberData(userId, '顾客');
         }
 
+        // 显示消息
         function showMessage(message) {
             document.getElementById('profileContent').innerHTML = `
                 <div style="text-align: center; padding: 40px 20px; color: #667eea;">
@@ -274,6 +302,7 @@
             `;
         }
 
+        // 显示错误
         function showError(message, userId = '') {
             let html = `
                 <div class="error">
@@ -298,18 +327,9 @@
             document.getElementById('profileContent').innerHTML = html;
         }
 
-        function manualQuery() {
-            const userId = document.getElementById('manualUserId').value.trim();
-            if (!userId) {
-                alert('请输入用户ID');
-                return;
-            }
-            logDebug('手动查询用户ID:', userId);
-            loadMemberData(userId, '顾客');
-        }
-
+        // 显示用户资料
         function displayProfile(profile, isNewUser) {
-            logDebug('显示用户资料', { profile, isNewUser });
+            addDebugLog('显示用户资料', { isNewUser, points: profile.points });
             
             let html = '';
             
@@ -357,10 +377,32 @@
             document.getElementById('profileContent').innerHTML = html;
         }
 
+        // 健康检查
+        async function healthCheck() {
+            try {
+                const response = await fetch(`${CONFIG.GAS_WEB_APP_URL}?method=healthCheck&_t=${Date.now()}`);
+                const data = await response.json();
+                return data.status === 'success';
+            } catch (error) {
+                addDebugLog('健康检查失败', error.message);
+                return false;
+            }
+        }
+
         // 页面加载
-        window.onload = function() {
-            logDebug('页面加载完成');
-            initializeLiff();
+        window.onload = async function() {
+            addDebugLog('页面加载完成');
+            showMessage('系统初始化中...');
+            
+            // 先检查后端服务
+            const isHealthy = await healthCheck();
+            if (!isHealthy) {
+                showError('后端服务暂时不可用，请稍后重试');
+                return;
+            }
+            
+            addDebugLog('后端服务正常，开始初始化LIFF');
+            await initializeLiff();
         };
     </script>
 </body>
