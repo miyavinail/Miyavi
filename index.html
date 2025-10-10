@@ -62,6 +62,13 @@
             color: #666;
             display: none;
         }
+        .login-prompt {
+            text-align: center;
+            padding: 30px 20px;
+            background: #e7f3ff;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
     </style>
 </head>
 <body>
@@ -87,6 +94,7 @@
         };
 
         let debugLogs = [];
+        let isInitializing = false;
 
         function addDebugLog(message, data = null) {
             const timestamp = new Date().toLocaleTimeString();
@@ -106,8 +114,47 @@
             debugDiv.style.display = debugDiv.style.display === 'none' ? 'block' : 'none';
         }
 
+        // 显示登录提示
+        function showLoginPrompt() {
+            document.getElementById('profileContent').innerHTML = `
+                <div class="login-prompt">
+                    <div style="font-size: 1.5em; margin-bottom: 15px;">🔐</div>
+                    <h3 style="margin-bottom: 10px;">需要登录</h3>
+                    <p style="color: #666; margin-bottom: 20px;">请登录以查看您的会员信息</p>
+                    <button onclick="handleLogin()" 
+                            style="padding: 12px 30px; background: #06c755; color: white; border: none; border-radius: 25px; cursor: pointer; font-size: 16px; font-weight: bold;">
+                        使用LINE登录
+                    </button>
+                    <div style="margin-top: 20px;">
+                        <button onclick="showManualInput()" 
+                                style="padding: 8px 16px; background: transparent; color: #667eea; border: 1px solid #667eea; border-radius: 5px; cursor: pointer;">
+                            手动输入用户ID
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        // 处理登录
+        async function handleLogin() {
+            addDebugLog('开始登录流程...');
+            try {
+                showMessage('正在登录...');
+                liff.login();
+            } catch (error) {
+                addDebugLog('登录出错', error.message);
+                showError('登录失败: ' + error.message);
+            }
+        }
+
         // 改进的LIFF初始化
         async function initializeLiff() {
+            if (isInitializing) {
+                addDebugLog('初始化已在进行中，跳过');
+                return;
+            }
+            
+            isInitializing = true;
             addDebugLog('=== LIFF初始化开始 ===');
             
             try {
@@ -150,12 +197,14 @@
                     version: liff.getVersion()
                 });
 
+                // 检查登录状态
                 if (!liff.isLoggedIn()) {
-                    addDebugLog('用户未登录，执行登录');
-                    liff.login();
+                    addDebugLog('用户未登录，显示登录提示');
+                    showLoginPrompt();
                     return;
                 }
 
+                // 用户已登录，获取用户信息
                 addDebugLog('开始获取用户信息...');
                 const profile = await liff.getProfile();
                 addDebugLog('✅ 获取用户信息成功', {
@@ -184,6 +233,8 @@
                 }
                 
                 showManualInputWithError(errorMessage);
+            } finally {
+                isInitializing = false;
             }
         }
 
@@ -255,7 +306,22 @@
 
         // 显示手动输入界面
         function showManualInput() {
-            showManualInputWithError('请在LINE应用中打开此页面，或手动输入用户ID');
+            document.getElementById('profileContent').innerHTML = `
+                <div style="text-align: center; padding: 20px;">
+                    <h3 style="margin-bottom: 10px;">积分查询</h3>
+                    <p style="color: #666; margin-bottom: 20px;">请输入您的用户ID查询积分</p>
+                    <input type="text" id="manualUserId" placeholder="输入用户ID" 
+                           style="padding: 12px; width: 80%; margin: 10px 0; border: 2px solid #667eea; border-radius: 8px; font-size: 16px;">
+                    <br>
+                    <button onclick="manualQuery()" 
+                            style="padding: 12px 24px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; margin: 10px 0;">
+                        查询积分
+                    </button>
+                    <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                        <small>提示：用户ID可以在之前的记录中找到，或向店员询问</small>
+                    </div>
+                </div>
+            `;
         }
 
         // 显示手动输入（带错误信息）
