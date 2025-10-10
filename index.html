@@ -42,17 +42,14 @@ async function loadMemberData(userId, displayName) {
     showMessage('正在加载您的会员信息...');
     
     try {
-        // 关键：确保method参数正确
+        // 修改这里：getUserProfileWithName → getUserProfile
         const url = `${CONFIG.GAS_WEB_APP_URL}?method=getUserProfile&userId=${encodeURIComponent(userId)}&displayName=${encodeURIComponent(displayName || '')}`;
         
         console.log('请求URL:', url);
         
         const response = await fetch(url);
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-        }
-        
         const data = await response.json();
+        
         console.log('API响应:', data);
         
         if (data.status === 'success') {
@@ -65,3 +62,4 @@ async function loadMemberData(userId, displayName) {
         showError('系统错误: ' + error.message, userId);
     }
 }
+
