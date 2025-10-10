@@ -1,106 +1,367 @@
-// 配置
-const CONFIG = {
-    LIFF_ID: '2008235894-KBlBRgrN',
-    GAS_WEB_APP_URL: 'https://member-api.miyavinail.workers.dev/'
-};
-
-let currentUserProfile = null;
-
-// 改进的LIFF初始化
-async function initializeLiff() {
-    console.log('=== LIFF初始化开始 ===');
-    
-    try {
-        // 首先检查是否在LINE环境中
-        const isInLine = /Line/i.test(navigator.userAgent);
-        console.log('LINE环境检测:', isInLine);
-        
-        if (!isInLine) {
-            console.log('不在LINE环境中，显示手动输入');
-            showManualInput();
-            return;
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的会员积分</title>
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <style>
+        /* 原有样式保持不变 */
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 0; 
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            min-height: 100vh;
         }
-
-        // 在LINE环境中初始化LIFF
-        await liff.init({ 
-            liffId: CONFIG.LIFF_ID 
-        });
-        console.log('✅ LIFF初始化成功');
-        
-        if (!liff.isLoggedIn()) {
-            console.log('用户未登录，执行登录');
-            liff.login();
-            return;
+        .container {
+            max-width: 400px;
+            margin: 0 auto;
+            background: white;
+            padding: 25px;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
         }
-
-        // 获取用户信息
-        const profile = await liff.getProfile();
-        console.log('✅ 获取LINE用户信息成功:', profile);
-        
-        // 加载会员数据
-        await loadMemberData(profile.userId, profile.displayName);
-        
-    } catch (error) {
-        console.error('❌ LIFF初始化失败:', error);
-        
-        // 更详细的错误处理
-        if (error.message.includes('LIFF_ID')) {
-            showError('LIFF配置错误，请联系管理员');
-        } else if (error.message.includes('network')) {
-            showError('网络连接失败，请检查网络后重试');
-        } else {
-            // 其他错误显示手动输入
-            showManualInputWithError(error.message);
+        .debug-info {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+            font-size: 12px;
+            color: #666;
+            display: none;
         }
-    }
-}
-
-// 改进的错误显示
-function showManualInputWithError(errorMsg) {
-    document.getElementById('profileContent').innerHTML = `
-        <div style="text-align: center; padding: 20px;">
-            <div style="color: #dc3545; margin-bottom: 15px;">
-                ⚠️ 自动查询失败: ${errorMsg}
-            </div>
-            <h3>积分查询</h3>
-            <p style="color: #666; margin-bottom: 20px;">请输入您的用户ID查询积分</p>
-            <input type="text" id="manualUserId" placeholder="输入用户ID" 
-                   style="padding: 12px; width: 80%; margin: 10px; border: 2px solid #667eea; border-radius: 8px; font-size: 16px;">
-            <button onclick="manualQuery()" 
-                    style="padding: 12px 24px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px;">
-                查询积分
-            </button>
-            <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
-                <small>提示：用户ID可以在之前的记录中找到，或向店员询问</small>
-            </div>
+        .debug-toggle {
+            background: #6c757d;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <button class="debug-toggle" onclick="toggleDebug()">显示调试信息</button>
+        <div id="debugInfo" class="debug-info"></div>
+        
+        <div style="text-align: center; margin-bottom: 20px;">
+            <div style="font-size: 1.4em; color: #667eea; font-weight: bold;">我的店铺</div>
+            <div style="color: #666;">会员中心</div>
         </div>
-    `;
-}
+        
+        <div id="profileContent">
+            <div class="loading">初始化中...</div>
+        </div>
+    </div>
 
-// 添加健康检查函数
-async function healthCheck() {
-    try {
-        const response = await fetch(`${CONFIG.GAS_WEB_APP_URL}?method=healthCheck`);
-        const data = await response.json();
-        return data.status === 'success';
-    } catch (error) {
-        console.error('健康检查失败:', error);
-        return false;
-    }
-}
+    <script>
+        // 配置
+        const CONFIG = {
+            LIFF_ID: '2008235894-KBlBRgrN',
+            GAS_WEB_APP_URL: 'https://member-api.miyavinail.workers.dev/'
+        };
 
-// 页面加载后初始化
-window.onload = async function() {
-    // 先显示加载中
-    showMessage('系统初始化中...');
-    
-    // 可选：先检查后端服务状态
-    const isBackendHealthy = await healthCheck();
-    if (!isBackendHealthy) {
-        showError('后端服务暂时不可用，请稍后重试');
-        return;
-    }
-    
-    // 初始化LIFF
-    await initializeLiff();
-};
+        // 调试信息收集
+        const debugLogs = [];
+
+        function logDebug(message, data = null) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = { timestamp, message, data };
+            debugLogs.push(logEntry);
+            console.log(`[${timestamp}] ${message}`, data || '');
+            
+            // 更新调试显示
+            updateDebugDisplay();
+        }
+
+        function updateDebugDisplay() {
+            const debugDiv = document.getElementById('debugInfo');
+            if (debugDiv) {
+                debugDiv.innerHTML = debugLogs.map(log => 
+                    `<div><strong>[${log.timestamp}]</strong> ${log.message} ${
+                        log.data ? JSON.stringify(log.data) : ''
+                    }</div>`
+                ).join('');
+            }
+        }
+
+        function toggleDebug() {
+            const debugDiv = document.getElementById('debugInfo');
+            debugDiv.style.display = debugDiv.style.display === 'none' ? 'block' : 'none';
+        }
+
+        // 改进的LIFF初始化
+        async function initializeLiff() {
+            logDebug('=== LIFF初始化开始 ===');
+            
+            try {
+                // 更准确的LINE环境检测
+                const userAgent = navigator.userAgent;
+                const isInLine = /Line/i.test(userAgent) || 
+                                window.navigator.standalone || 
+                                document.referrer.includes('line.me');
+                
+                logDebug('环境检测', {
+                    userAgent: userAgent.substring(0, 100),
+                    isInLine,
+                    referrer: document.referrer
+                });
+
+                if (!isInLine) {
+                    logDebug('不在LINE环境中，显示手动输入');
+                    showManualInput();
+                    return;
+                }
+
+                logDebug('开始初始化LIFF SDK');
+                
+                // 添加超时控制
+                const initPromise = liff.init({ 
+                    liffId: CONFIG.LIFF_ID 
+                });
+                
+                const timeoutPromise = new Promise((_, reject) => {
+                    setTimeout(() => reject(new Error('LIFF初始化超时')), 10000);
+                });
+                
+                await Promise.race([initPromise, timeoutPromise]);
+                
+                logDebug('✅ LIFF初始化成功', {
+                    isLoggedIn: liff.isLoggedIn(),
+                    isInClient: liff.isInClient(),
+                    os: liff.getOS(),
+                    language: liff.getLanguage(),
+                    version: liff.getVersion()
+                });
+
+                if (!liff.isLoggedIn()) {
+                    logDebug('用户未登录，执行登录');
+                    liff.login();
+                    return;
+                }
+
+                logDebug('开始获取用户信息');
+                const profile = await liff.getProfile();
+                logDebug('✅ 获取LINE用户信息成功', {
+                    userId: profile.userId,
+                    displayName: profile.displayName.substring(0, 20) + '...'
+                });
+                
+                await loadMemberData(profile.userId, profile.displayName);
+                
+            } catch (error) {
+                logDebug('❌ LIFF初始化失败', {
+                    error: error.message,
+                    stack: error.stack
+                });
+                
+                // 根据错误类型处理
+                if (error.message.includes('LIFF_ID')) {
+                    showError('应用配置错误，请联系管理员');
+                } else if (error.message.includes('timeout')) {
+                    showError('连接超时，请检查网络后重试');
+                } else {
+                    showManualInputWithError('自动获取失败: ' + error.message);
+                }
+            }
+        }
+
+        // 改进的会员数据加载
+        async function loadMemberData(userId, displayName) {
+            logDebug('开始加载会员数据', { userId, displayName });
+            
+            showMessage('正在加载您的会员信息...');
+            
+            try {
+                // 构建URL - 使用更简单的方式
+                const params = new URLSearchParams({
+                    method: 'getUserProfile',
+                    userId: userId,
+                    displayName: displayName || '',
+                    _t: Date.now() // 防止缓存
+                });
+                
+                const url = `${CONFIG.GAS_WEB_APP_URL}?${params}`;
+                logDebug('请求URL', { url: url.substring(0, 100) + '...' });
+
+                // 添加请求超时
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 15000);
+                
+                const response = await fetch(url, {
+                    method: 'GET',
+                    signal: controller.signal,
+                    headers: {
+                        'Accept': 'application/json',
+                    }
+                });
+                
+                clearTimeout(timeoutId);
+                
+                logDebug('收到响应', {
+                    status: response.status,
+                    statusText: response.statusText,
+                    ok: response.ok
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                logDebug('API响应数据', data);
+                
+                if (data.status === 'success') {
+                    displayProfile(data.profile, data.isNewUser);
+                } else {
+                    throw new Error(data.message || '未知错误');
+                }
+                
+            } catch (error) {
+                logDebug('获取会员数据错误', {
+                    error: error.message,
+                    name: error.name
+                });
+                
+                let errorMessage = '系统错误: ' + error.message;
+                if (error.name === 'AbortError') {
+                    errorMessage = '请求超时，请检查网络连接';
+                }
+                
+                showError(errorMessage, userId);
+            }
+        }
+
+        // 显示手动输入界面（带错误信息）
+        function showManualInputWithError(errorMsg) {
+            document.getElementById('profileContent').innerHTML = `
+                <div style="text-align: center; padding: 20px;">
+                    <div style="color: #dc3545; background: #f8d7da; padding: 10px; border-radius: 8px; margin-bottom: 15px;">
+                        ⚠️ ${errorMsg}
+                    </div>
+                    <h3>积分查询</h3>
+                    <p style="color: #666; margin-bottom: 20px;">请输入您的用户ID查询积分</p>
+                    <input type="text" id="manualUserId" placeholder="输入用户ID" 
+                           style="padding: 12px; width: 80%; margin: 10px; border: 2px solid #667eea; border-radius: 8px; font-size: 16px;">
+                    <button onclick="manualQuery()" 
+                            style="padding: 12px 24px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px;">
+                        查询积分
+                    </button>
+                    <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                        <small>提示：用户ID可以在之前的记录中找到，或向店员询问</small>
+                    </div>
+                </div>
+            `;
+        }
+
+        // 其他函数保持不变（showMessage, showError, displayProfile, manualQuery等）
+        function showManualInput() {
+            showManualInputWithError('请在LINE应用中打开此页面');
+        }
+
+        function showMessage(message) {
+            document.getElementById('profileContent').innerHTML = `
+                <div style="text-align: center; padding: 40px 20px; color: #667eea;">
+                    <div style="font-size: 1.2em; margin-bottom: 10px;">${message}</div>
+                    <div class="loading-spinner"></div>
+                </div>
+            `;
+        }
+
+        function showError(message, userId = '') {
+            let html = `
+                <div class="error">
+                    <h3>❌ 查询失败</h3>
+                    <p>${message}</p>
+                    <button onclick="showManualInput()" 
+                            style="padding: 10px 20px; background: #dc3545; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 10px;">
+                        重新输入
+                    </button>
+            `;
+            
+            if (userId) {
+                html += `
+                    <div style="margin-top: 15px; padding: 10px; background: white; border-radius: 5px;">
+                        <strong>您的用户ID:</strong> ${userId}<br>
+                        <small>请妥善保存此ID，或向店员提供</small>
+                    </div>
+                `;
+            }
+            
+            html += `</div>`;
+            document.getElementById('profileContent').innerHTML = html;
+        }
+
+        function manualQuery() {
+            const userId = document.getElementById('manualUserId').value.trim();
+            if (!userId) {
+                alert('请输入用户ID');
+                return;
+            }
+            logDebug('手动查询用户ID:', userId);
+            loadMemberData(userId, '顾客');
+        }
+
+        function displayProfile(profile, isNewUser) {
+            logDebug('显示用户资料', { profile, isNewUser });
+            
+            let html = '';
+            
+            if (isNewUser) {
+                html = `
+                    <div style="background: #d4edda; color: #155724; padding: 15px; border-radius: 8px; margin-bottom: 15px; text-align: center;">
+                        🎉 欢迎新会员！您的账户已创建
+                    </div>
+                `;
+            } else {
+                html = `
+                    <div style="background: #d1ecf1; color: #0c5460; padding: 10px; border-radius: 8px; margin-bottom: 15px; text-align: center;">
+                        ✅ 欢迎回来！
+                    </div>
+                `;
+            }
+
+            html += `
+                <div class="points-card">
+                    <div style="font-size: 0.9em; opacity: 0.9;">当前积分</div>
+                    <div style="font-size: 3em; font-weight: bold; margin: 10px 0;">${profile.points}</div>
+                    <div>Points</div>
+                </div>
+
+                <div style="background: #f8f9fa; padding: 20px; border-radius: 12px; margin: 20px 0;">
+                    <div style="display: flex; justify-content: space-between; margin: 12px 0; padding: 8px 0; border-bottom: 1px solid #eee;">
+                        <span>会员姓名</span>
+                        <span style="font-weight: bold;">${profile.displayName}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin: 12px 0; padding: 8px 0;">
+                        <span>总消费额</span>
+                        <span style="font-weight: bold;">￥${(profile.totalSpent || 0).toLocaleString()}</span>
+                    </div>
+                </div>
+
+                <div style="background: #fff3cd; border: 2px solid #ffc107; border-radius: 10px; padding: 15px; margin: 20px 0;">
+                    <div style="font-weight: bold; color: #856404;">🔑 会员ID</div>
+                    <div style="background: white; padding: 10px; border-radius: 6px; font-family: 'Courier New', monospace; font-size: 0.8em; word-break: break-all; margin: 10px 0;">
+                        ${profile.userId}
+                    </div>
+                    <small style="color: #856404;">请向店员出示此ID进行积分操作</small>
+                </div>
+            `;
+            
+            document.getElementById('profileContent').innerHTML = html;
+        }
+
+        // 页面加载
+        window.onload = function() {
+            logDebug('页面加载完成');
+            initializeLiff();
+        };
+    </script>
+</body>
+</html>
